@@ -625,9 +625,9 @@ class CrazyflieInDroneDome(Supervisor):
         # Update drone states in simulation
         super().step(self.timestep)
 
-# A thread that runs the path planner in parallel with the simulation 路径规划 #0000FF
+# A thread that runs the path planner in parallel with the simulation 路径规划线程 #0000FF
 def path_planner_thread(drone):
-    global latest_sensor_data, latest_camera_data, current_setpoint, running
+    global latest_sensor_data, latest_camera_data, current_setpoint, running #00FF00 全局变量
 
     # Set the initial last planner time
     last_planner_time = drone.getTime()
@@ -706,14 +706,15 @@ if __name__ == '__main__':
                     
                     # Rotate the control commands from the body reference frame to the inertial reference frame
                     euler_angles = [sensor_data['roll'], sensor_data['pitch'], sensor_data['yaw']]
-                    quaternion = [sensor_data['q_x'], sensor_data['q_y'], sensor_data['q_z'], sensor_data['q_w']]
+                    quaternion   = [sensor_data['q_x'], sensor_data['q_y'], sensor_data['q_z'], sensor_data['q_w']]
                     control_commands = ex0_rotations.rot_body2inertial(control_commands, euler_angles, quaternion)
 
                     # Call the PID controller to get the motor commands
                     motorPower = drone.PID_CF.keys_to_pwm(drone.dt_ctrl, control_commands, sensor_data)
                     
                     camera_data = drone.read_camera()
-                    assignment.img_debug(camera_data)  #0000FF 添加测试
+                    assignment.img_debug(camera_data)          #0000FF 键盘模式：相机测试
+                    assignment.quat_debug(sensor_data.copy())  #0000FF 键盘模式：四元数测试
 
                 elif control_style == 'path_planner':
                     # # Update the setpoint
@@ -733,12 +734,12 @@ if __name__ == '__main__':
 
                         # Read the camera feed 读取相机数据
                         camera_data = drone.read_camera()
-                        assignment.img_debug(camera_data) #0000FF 添加测试
+                        assignment.img_debug(camera_data) #0000FF 自动路径：添加测试
 
                         # Update the sensor data in the thread
                         with sensor_lock:
-                            latest_sensor_data = sensor_data
-                            latest_camera_data = camera_data
+                            latest_sensor_data = sensor_data #00FF00 全局变量 传感器
+                            latest_camera_data = camera_data #00FF00 全局变量 相机
 
                         # Call the PID controller to get the motor commands
                         motorPower = drone.PID_CF.setpoint_to_pwm(drone.dt_ctrl, current_setpoint, latest_sensor_data)

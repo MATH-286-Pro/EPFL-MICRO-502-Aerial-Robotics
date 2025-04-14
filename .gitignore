@@ -138,3 +138,5 @@ dmypy.json
 # Occupancy map
 map.png
 
+test_img.jpg
+test.ipynb
