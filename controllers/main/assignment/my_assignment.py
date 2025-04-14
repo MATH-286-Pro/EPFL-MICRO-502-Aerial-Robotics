@@ -56,29 +56,102 @@ import cv2
 
 
 # 宏定义
-W = 0; X = 1; Y = 2; Z = 3
+W = 0  # 四元数下标
+X = 1
+Y = 2
+Z = 3
+f_pixel = 161.013922282   # 相机焦距
+vector_from_drone_to_cam = np.array([0.03,0,00,0.01]) # 无人机中心到相机偏移向量
+
+########################################## 基础函数 ##########################################
+def ROUND(a):
+    return (a*100).astype(int)/100
+
+# 基于点斜式的对角线交点计算
+# def compute_center(rect):
+
+#     p0 = rect[0,0]; p1 = rect[1,0]; p2 = rect[2,0]; p3 = rect[3,0]
+
+#     x0 = p0[0]; y0 = p0[1]
+#     x1 = p1[0]; y1 = p1[1]
+#     x2 = p2[0]; y2 = p2[1]
+#     x3 = p3[0]; y3 = p3[1]
+
+#     k0 = (y2-y0)/(x2-x0)
+#     k1 = (y3-y1)/(x3-x1)
+
+#     xc = (k1*x1-k0*x0-(y1-y0))/(k1-k0)
+#     yc = k1*(xc-x1)+y1
+
+#     return xc, yc
+
+# 中心点基础函数
+def compute_center(rect, eps=1e-6):
+
+    # 取出四个点
+    p0 = rect[0, 0]
+    p1 = rect[1, 0]
+    p2 = rect[2, 0]
+    p3 = rect[3, 0]
+    
+    x0, y0 = p0
+    x1, y1 = p1
+    x2, y2 = p2
+    x3, y3 = p3
+
+    # 计算分母
+    denom = (x0 - x2) * (y1 - y3) - (y0 - y2) * (x1 - x3)
+    if abs(denom) < eps:
+        # 分母接近0，说明两直线平行或共线，无法确定交点
+        return None
+
+    # 计算分子中的通项
+    det1 = x0 * y2 - y0 * x2
+    det2 = x1 * y3 - y1 * x3
+
+    # 计算交点坐标
+    x = (det1 * (x1 - x3) - (x0 - x2) * det2) / denom
+    y = (det1 * (y1 - y3) - (y0 - y2) * det2) / denom
+
+    return x, y
 
 
-def compute_center(rect):
+# 四元数基础函数
+def quat_mutiplication(q1,q2):
+    ans = np.array([q1[W]*q2[W] - q1[X]*q2[X] - q1[Y]*q2[Y] - q1[Z]*q2[Z],
+                    q1[W]*q2[W] + q1[X]*q2[X] + q1[Y]*q2[Y] - q1[Z]*q2[Z],
+                    q1[W]*q2[W] - q1[X]*q2[X] + q1[Y]*q2[Y] + q1[Z]*q2[Z],
+                    q1[W]*q2[W] + q1[X]*q2[X] - q1[Y]*q2[Y] + q1[Z]*q2[Z],])
+    return ans
 
-    p0 = rect[0,0]; p1 = rect[1,0]; p2 = rect[2,0]; p3 = rect[3,0]
+def quat_rotate(P1, Q):
+    Q_prim = np.array([Q[W], -Q[X], -Q[Y], -Q[Z]])
+    P2 = quat_mutiplication(quat_mutiplication(Q,P1),Q_prim)
+    return P2
 
-    x0 = p0[0]; y0 = p0[1]
-    x1 = p1[0]; y1 = p1[1]
-    x2 = p2[0]; y2 = p2[1]
-    x3 = p3[0]; y3 = p3[1]
+def vector_rotate(p1, Q):
+    P1 = np.array([0, p1[0], p1[1], p1[2]])
+    P2 = quat_rotate(P1, Q)
+    return P2[1:4]  # 返回旋转后的向量部分
 
-    k0 = (y2-y0)/(x2-x0)
-    k1 = (y3-y1)/(x3-x1)
 
-    xc = (k1*x1-k0*x0-(y1-y0))/(k1-k0)
-    yc = k1*(xc-x1)+y1
+def get_quat_from_sensor(sensor_data):
+    q_x = sensor_data['q_x']
+    q_y = sensor_data['q_y']
+    q_z = sensor_data['q_z']
+    q_w = sensor_data['q_w']
 
-    return xc, yc
+    # 将四元数转换为 numpy 数组
+    quat = np.array([q_w, q_x, q_y, q_z])
+    
+    return quat
+
+########################################## 基础函数 ##########################################
 
 
 # 图像处理函数
-def img_debug(camera_data):
+def img_debug(camera_data,
+              sensor_data):
 
     # 原始 BGR 图像（忽略 Alpha）
     b, g, r, a = cv2.split(camera_data)
@@ -86,9 +159,9 @@ def img_debug(camera_data):
     # cv2.imshow("Original BGR Image", bgr_image)
 
     # 获取图像中心位置
-    center_y, center_x, _ = bgr_image.shape
-    center_x /= 2
-    center_y /= 2
+    cam_center_y, cam_center_x, _ = bgr_image.shape
+    cam_center_x /= 2
+    cam_center_y /= 2
 
     # 直接用 RGB 图像扣图
     bgr = bgr_image.copy()
@@ -129,50 +202,44 @@ def img_debug(camera_data):
     if largest_rect is not None:
         
         # 计算中心点
-        cX, cY = compute_center(largest_rect) # np.Float
-        cX = int(cX)                          # int
-        cY = int(cY)                          # int
+        rect_center_x, rect_center_y = compute_center(largest_rect) # np.Float
+        cX_pixel = int(rect_center_x)                               # int
+        cY_pixel = int(rect_center_y)                               # int
 
         # 在原图上画出四个点
         for point in largest_rect:
             x, y = point[0]
             cv2.circle(bgr_image, (x, y), 5, (0, 255, 0), -1)
-        cv2.circle(bgr_image, (cX, cY), 5, (0, 255, 0), -1)
+        cv2.circle(bgr_image, (cX_pixel, cY_pixel), 5, (0, 255, 0), -1)
         cv2.imshow("Rectangle Corners", bgr_image)
 
         # #00FF00 
-        # print(largest_rect[0,0],largest_rect[1,0],largest_rect[2,0],largest_rect[3,0],[cX,cY])
+        # 计算目标点位置
+        cam_delta_x = rect_center_x - cam_center_x
+        cam_delta_y = rect_center_y - cam_center_y
+
+        # print('center %.2f, %.2f' % (cam_delta_x, cam_delta_y))
+
+        # 无人机坐标系：目标方向向量
+        Vector_Direct_Cam2Target_DroneFrame = np.array([f_pixel, -cam_delta_x, -cam_delta_y])
 
     else:
         # 将不会显示四个点
         cv2.imshow("Rectangle Corners", bgr_image)
 
+    # 坐标变换
+    Q         = get_quat_from_sensor(sensor_data)  
+    Q_reverse = np.array([Q[W], -Q[X], -Q[Y], -Q[Z]])
+    Vector_Direct_Cam2Target_WolrdFrame = vector_rotate(Vector_Direct_Cam2Target_DroneFrame, Q_reverse)  # 旋转向量
+
+    print(Vector_Direct_Cam2Target_DroneFrame)
+    # print(Vector_Direct_Cam2Target_WolrdFrame)
 
     cv2.waitKey(1)
 
 
 
-
-def img_process(camera_data):
-    pass
-
-
 ########################################## 四元数部分 ######################################################
-def ROUND(a):
-    return (a*100).astype(int)/100
-
-def quat_mutiplication(q1,q2):
-    ans = np.array([q1[W]*q2[W] - q1[X]*q2[X] - q1[Y]*q2[Y] - q1[Z]*q2[Z],
-                    q1[W]*q2[W] + q1[X]*q2[X] + q1[Y]*q2[Y] - q1[Z]*q2[Z],
-                    q1[W]*q2[W] - q1[X]*q2[X] + q1[Y]*q2[Y] + q1[Z]*q2[Z],
-                    q1[W]*q2[W] + q1[X]*q2[X] - q1[Y]*q2[Y] + q1[Z]*q2[Z],])
-    return ans
-
-def quat_rotate(P1, q):
-    q_prim = np.array([q[W], -q[X], -q[Y], -q[Z]])
-    P2 = quat_mutiplication(quat_mutiplication(q,P1),q_prim)
-    return P2
-
 def quat_debug(sensor_data_copy):
 
     q_x = sensor_data_copy['q_x']

@@ -713,8 +713,8 @@ if __name__ == '__main__':
                     motorPower = drone.PID_CF.keys_to_pwm(drone.dt_ctrl, control_commands, sensor_data)
                     
                     camera_data = drone.read_camera()
-                    assignment.img_debug(camera_data)          #0000FF 键盘模式：相机测试
-                    assignment.quat_debug(sensor_data.copy())  #0000FF 键盘模式：四元数测试
+                    assignment.img_debug(camera_data, sensor_data.copy())          #0000FF 键盘模式：相机测试
+                    assignment.quat_debug(sensor_data.copy())                      #0000FF 键盘模式：四元数测试
 
                 elif control_style == 'path_planner':
                     # # Update the setpoint
@@ -734,7 +734,7 @@ if __name__ == '__main__':
 
                         # Read the camera feed 读取相机数据
                         camera_data = drone.read_camera()
-                        assignment.img_debug(camera_data) #0000FF 自动路径：添加测试
+                        assignment.img_debug(camera_data, sensor_data.copy()) #0000FF 自动路径：添加测试
 
                         # Update the sensor data in the thread
                         with sensor_lock:
