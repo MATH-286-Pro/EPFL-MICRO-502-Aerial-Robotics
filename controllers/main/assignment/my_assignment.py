@@ -70,6 +70,8 @@ min_cumulative_baseline = 0.3  # 设定累计基线距离阈值
 
 target_buffer   = [] # 目标缓存
 
+
+
 ########################################## 基础函数 ##########################################
 def ROUND(a):
     return (a*100).astype(int)/100
@@ -249,15 +251,14 @@ def img_to_vector(camera_data,
         cam_delta_y = rect_center_y - cam_center_y
 
         # 无人机坐标系：目标方向向量 √
-        Vector_Direct_Cam2Target_DroneFrame = np.array([f_pixel, -cam_delta_x, -cam_delta_y])
+        Vector_Cam2Target_DroneFrame = np.array([f_pixel, -cam_delta_x, -cam_delta_y])
 
         # 坐标变换
         Q_Drone2World = get_quat_from_sensor(sensor_data)  
 
-        Vector_Direct_Cam2Target_WorldFrame = vector_rotate(Vector_Direct_Cam2Target_DroneFrame, Q_Drone2World)  # Body Frame -> World Frame
-        vector_Drone2Cam_WorldFrame         = vector_rotate(vector_from_drone_to_cam, Q_Drone2World)             # Body Frame -> World Frame
+        Vector_Cam2Target_WorldFrame = vector_rotate(Vector_Cam2Target_DroneFrame, Q_Drone2World)  # Body Frame -> World Frame
     
-        return Vector_Direct_Cam2Target_WorldFrame / np.linalg.norm(Vector_Direct_Cam2Target_WorldFrame)
+        return Vector_Cam2Target_WorldFrame / np.linalg.norm(Vector_Cam2Target_WorldFrame)
 
 
     # 没看见方框  将不会显示四个点
@@ -313,7 +314,7 @@ def target_positioning(P_WorldFrame_New = None,
 
 
 ############################################# 三角定位，缓存更新 #############################################
-def update_and_compute_target(P_new, vector_new):
+def Compute_Target_With_Buffer(P_new, vector_new):
     global position_buffer, vector_buffer, min_cumulative_baseline
 
     ## 更新缓存，如果视野内无目标，不能将 None 添加到缓存中
@@ -331,11 +332,21 @@ def update_and_compute_target(P_new, vector_new):
             position_buffer = []
             vector_buffer   = []
 
-            target_buffer.append(T) # 目标缓存
+            # target_buffer.append(T) # 目标缓存
 
             return T
     return None
 ############################################# 三角定位，缓存更新 #############################################
+
+
+
+############################################ 计算目标 YAW 轴 ############################################
+def Compute_YAW():
+    global target_buffer
+
+    if target_buffer[-1] is not None:
+        pass
+
 
 # 无人机控制函数
 def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
@@ -363,6 +374,15 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
                        sensor_data['y_global'], 
                        1.0,   # 1.0
                        sensor_data['yaw']]
+    
+    #FF0000 目标测试
+    if target_buffer[-1] is not None:
+        TARGET = target_buffer[-1]
+    control_command = [TARGET[0],
+                       TARGET[1],
+                       TARGET[2],
+                       sensor_data['yaw']]
+
     
     return control_command 
 

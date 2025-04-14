@@ -17,7 +17,7 @@ import cv2 #00FF00 添加测试
 import matplotlib.pyplot as plt
 
 exp_num = 4                        # 0: Coordinate Transformation, 1: PID Tuning, 2: Kalman Filter, 3: Motion Planning, 4: Project
-control_style = 'path_planner'     # 'keyboard' or 'path_planner'
+control_style = 'keyboard'     # 'keyboard' or 'path_planner'
 rand_env = False                   # Randomise the environment
 
 # Global variables for handling threads
@@ -721,8 +721,12 @@ if __name__ == '__main__':
                     Vector_Cam2Target_WorldFrame = assignment.img_to_vector(camera_data, sensor_data)      #0000FF 键盘模式：相机测试
 
                     #00FF00 Debug
-                    Target_WorldFrame = assignment.update_and_compute_target(P_Cam_WorldFrame,
+                    Target_WorldFrame = assignment.Compute_Target_With_Buffer(P_Cam_WorldFrame,
                                                                              Vector_Cam2Target_WorldFrame)
+
+                    #00FF00 添加测试
+                    print(sensor_data['yaw'] * 180/3.14)
+
 
                 elif control_style == 'path_planner':
                     # # Update the setpoint
@@ -749,7 +753,7 @@ if __name__ == '__main__':
                         Vector_Cam2Target_WorldFrame = assignment.img_to_vector(camera_data, sensor_data)      #0000FF 键盘模式：相机测试
 
                         #00FF00 Debug
-                        Target_WorldFrame = assignment.update_and_compute_target(P_Cam_WorldFrame,
+                        Target_WorldFrame = assignment.Compute_Target_With_Buffer(P_Cam_WorldFrame,
                                                                                 Vector_Cam2Target_WorldFrame)
 
                         # Update the sensor data in the thread
