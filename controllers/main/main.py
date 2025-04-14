@@ -678,6 +678,8 @@ if __name__ == '__main__':
     assert control_style in ['keyboard','path_planner'], "Variable control_style must either be 'keyboard' or 'path_planner'"
     assert exp_num in [0,1,2,3,4], "Exp_num must be a value between 0 and 4"
 
+    # 初始化 无人机控制类
+    Drone_Controller = assignment.Class_Drone_Controller()
 
     # Start the path planner thread
     if control_style == 'path_planner' and exp_num == 4:
@@ -715,17 +717,9 @@ if __name__ == '__main__':
                     
                     camera_data = drone.read_camera()
 
-                    #0000ff 测试三角定位
-                    # 新数据
-                    P_Cam_WorldFrame = assignment.get_position_cam_global(sensor_data)     # 获取 #00FF00 相机全局坐标 #00FF00 而不是无人机的
-                    Vector_Cam2Target_WorldFrame = assignment.img_to_vector(camera_data, sensor_data)      #0000FF 键盘模式：相机测试
-
-                    #00FF00 Debug
-                    Target_WorldFrame = assignment.Compute_Target_With_Buffer(P_Cam_WorldFrame,
-                                                                             Vector_Cam2Target_WorldFrame)
-
-                    #00FF00 添加测试
-                    print(sensor_data['yaw'] * 180/3.14)
+                    #00FF00 类更新
+                    Drone_Controller.update(sensor_data, camera_data) 
+                    Drone_Controller.Compute_Target_With_Buffer()
 
 
                 elif control_style == 'path_planner':
