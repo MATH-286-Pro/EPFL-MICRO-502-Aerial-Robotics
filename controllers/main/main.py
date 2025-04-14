@@ -678,6 +678,7 @@ if __name__ == '__main__':
     assert control_style in ['keyboard','path_planner'], "Variable control_style must either be 'keyboard' or 'path_planner'"
     assert exp_num in [0,1,2,3,4], "Exp_num must be a value between 0 and 4"
 
+
     # Start the path planner thread
     if control_style == 'path_planner' and exp_num == 4:
         planner_thread = threading.Thread(target=path_planner_thread, args=(drone,));    #00FF00 这里就运行了一次，是多线程任务
@@ -713,8 +714,15 @@ if __name__ == '__main__':
                     motorPower = drone.PID_CF.keys_to_pwm(drone.dt_ctrl, control_commands, sensor_data)
                     
                     camera_data = drone.read_camera()
-                    assignment.img_debug(camera_data, sensor_data.copy())          #0000FF 键盘模式：相机测试
-                    assignment.quat_debug(sensor_data.copy())                      #0000FF 键盘模式：四元数测试
+
+                    #0000ff 测试三角定位
+                    # 新数据
+                    P_WorldFrame = assignment.get_position_global(sensor_data) 
+                    Vector_Direct_Cam2Target_WorldFrame = assignment.img_to_vector(camera_data, sensor_data)      #0000FF 键盘模式：相机测试
+
+                    #00FF00 Debug
+                    Target_WorldFrame = assignment.update_and_compute_target(P_WorldFrame,
+                                                                             Vector_Direct_Cam2Target_WorldFrame)
 
                 elif control_style == 'path_planner':
                     # # Update the setpoint
@@ -734,7 +742,7 @@ if __name__ == '__main__':
 
                         # Read the camera feed 读取相机数据
                         camera_data = drone.read_camera()
-                        assignment.img_debug(camera_data, sensor_data.copy()) #0000FF 自动路径：添加测试
+                        assignment.img_to_vector(camera_data, sensor_data.copy()) #0000FF 自动路径：添加测试
 
                         # Update the sensor data in the thread
                         with sensor_lock:

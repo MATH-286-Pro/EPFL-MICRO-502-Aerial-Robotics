@@ -63,6 +63,11 @@ Z = 3
 f_pixel = 161.013922282   # 相机焦距
 vector_from_drone_to_cam = np.array([0.03,0,00,0.01]) # 无人机中心到相机偏移向量
 
+# 全局变量 (三角定位)
+position_buffer = [] # 位置缓存
+vector_buffer   = [] # 方向缓存
+min_cumulative_baseline = 0.3  # 设定累计基线距离阈值
+
 ########################################## 基础函数 ##########################################
 def ROUND(a):
     return (a*100).astype(int)/100
@@ -141,17 +146,25 @@ def get_quat_from_sensor(sensor_data):
     q_z = sensor_data['q_z']
     q_w = sensor_data['q_w']
 
-    # 将四元数转换为 numpy 数组
     quat = np.array([q_w, q_x, q_y, q_z])
     
     return quat
+
+def get_position_global(sensor_data):
+    x_global = sensor_data['x_global']
+    y_global = sensor_data['y_global']
+    z_global = sensor_data['z_global']
+
+    position = np.array([x_global, y_global, z_global])
+    
+    return position
 
 ########################################## 基础函数 ##########################################
 
 
 # 图像处理函数
-def img_debug(camera_data,
-              sensor_data):
+def img_to_vector(camera_data,
+                  sensor_data):
 
     # 原始 BGR 图像（忽略 Alpha）
     b, g, r, a = cv2.split(camera_data)
@@ -199,6 +212,11 @@ def img_debug(camera_data,
                 largest_rect = approx
 
     # 4. 可视化
+    # 看见方框
+
+    cv2.waitKey(1) # 如果放在 return 后面会报错
+
+
     if largest_rect is not None:
         
         # 计算中心点
@@ -206,10 +224,10 @@ def img_debug(camera_data,
         cX_pixel = int(rect_center_x)                               # int
         cY_pixel = int(rect_center_y)                               # int
 
-        # 在原图上画出四个点
-        for point in largest_rect:
-            x, y = point[0]
-            cv2.circle(bgr_image, (x, y), 5, (0, 255, 0), -1)
+        # # 在原图上画出四个点
+        # for point in largest_rect:
+        #     x, y = point[0]
+        #     cv2.circle(bgr_image, (x, y), 5, (0, 255, 0), -1)
         cv2.circle(bgr_image, (cX_pixel, cY_pixel), 5, (0, 255, 0), -1)
         cv2.imshow("Rectangle Corners", bgr_image)
 
@@ -222,43 +240,95 @@ def img_debug(camera_data,
 
         # 坐标变换
         Q = get_quat_from_sensor(sensor_data)  
-        Vector_Direct_Cam2Target_WolrdFrame = vector_rotate(Vector_Direct_Cam2Target_DroneFrame, Q)  # 旋转向量
+        Vector_Direct_Cam2Target_WorldFrame = vector_rotate(Vector_Direct_Cam2Target_DroneFrame, Q)  # 旋转向量
 
-        print(Vector_Direct_Cam2Target_DroneFrame, "world frame", Vector_Direct_Cam2Target_WolrdFrame)
+        # print(Vector_Direct_Cam2Target_DroneFrame, "world frame", Vector_Direct_Cam2Target_WorldFrame)
 
+        return Vector_Direct_Cam2Target_WorldFrame / np.linalg.norm(Vector_Direct_Cam2Target_WorldFrame)
+
+
+    # 没看见方框  将不会显示四个点
     else:
-        # 将不会显示四个点
         cv2.imshow("Rectangle Corners", bgr_image)
+        return None
 
 
-    cv2.waitKey(1)
+
+
+########################################## 三角定位部分 ######################################################
+def target_positioning(P_WorldFrame_New = None, 
+                       P_WorldFrame_Old = None,
+                       Vector_Direct_Cam2Target_WorldFrame_New = None,
+                       Vector_Direct_Cam2Target_WorldFrame_Old = None,
+                       min_baseline = 0.1): # 最小基线长度
+
+    # print(np.array_equal(Vector_Direct_Cam2Target_WorldFrame_New, Vector_Direct_Cam2Target_WorldFrame_Old))
+
+    # 如果没有输入数据，直接返回 None
+    if P_WorldFrame_Old is None or Vector_Direct_Cam2Target_WorldFrame_Old is None:
+        return None
+    elif np.array_equal(P_WorldFrame_New, P_WorldFrame_Old):
+        return None
+    elif np.array_equal(Vector_Direct_Cam2Target_WorldFrame_New, Vector_Direct_Cam2Target_WorldFrame_Old):
+        return None
+    elif Vector_Direct_Cam2Target_WorldFrame_New is None:
+        return None
+    else:
+        # 重命名
+        r0 = Vector_Direct_Cam2Target_WorldFrame_Old
+        r1 = Vector_Direct_Cam2Target_WorldFrame_New
+        P0 = P_WorldFrame_Old
+        P1 = P_WorldFrame_New
+
+        # 求解线性方程组
+        A = np.array([[r0 @ r0, -r0 @ r1],
+                    [r0 @ r1, -r1 @ r1]])
+        b = np.array([[r0 @ (P1 - P0)],
+                      [r1 @ (P1 - P0)]])
+        
+        try:
+            x, _, _, _ = np.linalg.lstsq(A, b, rcond=None) # 最小二乘法求解，更稳定
+            # x = np.linalg.solve(A, b)
+        except np.linalg.LinAlgError:
+            print("Error: Singular matrix, cannot solve the system of equations.")
+            return None
+
+        # 计算目标位置
+        T0 = P0 + x[0] * r0
+        T1 = P1 + x[1] * r1
+        T = (T0 + T1) / 2
+
+    print("目标全局坐标：",T)
+
+    return T
+
+    # 点1 = [2.12, 1.84, 1.24]
+    # 点2 = [5.12, 2.30, 0.78]
+
+########################################## 三角定位部分 ######################################################
 
 
 
-########################################## 四元数部分 ######################################################
-def quat_debug(sensor_data_copy):
 
-    q_x = sensor_data_copy['q_x']
-    q_y = sensor_data_copy['q_y']
-    q_z = sensor_data_copy['q_z']
-    q_w = sensor_data_copy['q_w']
+############################################# 三角定位，缓存更新 #############################################
+def update_and_compute_target(P_new, vector_new):
+    global position_buffer, vector_buffer, min_cumulative_baseline
 
-    x_global = sensor_data_copy['x_global']
-    y_global = sensor_data_copy['y_global']
-    z_global = sensor_data_copy['z_global']
+    position_buffer.append(P_new)
+    vector_buffer.append(vector_new)
 
-    P_global = np.array([0,x_global,y_global,z_global])
-    
-    q = np.array([q_w, q_x, q_y, q_z])
-
-    P_local = quat_rotate(P_global, q)
-
-    # print('local = ', ROUND(P_local[X:Z+1]), 'global = ', ROUND(P_global[X:Z+1]))
-
-    return 0
-########################################## 四元数部分 ######################################################
-
-
+    # 计算累计位移
+    if len(position_buffer) >= 2: # 至少两帧数据
+        cumulative_baseline = np.linalg.norm(position_buffer[-1] - position_buffer[0])
+        if cumulative_baseline >= min_cumulative_baseline:
+            T = target_positioning(position_buffer[-1],position_buffer[0],
+                                   vector_buffer[-1],vector_buffer[0])
+            # 清空缓存
+            position_buffer = []
+            vector_buffer = []
+            return T
+    return None
+############################################# 三角定位，缓存更新 #############################################
 
 # 无人机控制函数
 def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
