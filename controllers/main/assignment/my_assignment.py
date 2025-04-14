@@ -68,6 +68,8 @@ position_buffer = [] # 位置缓存
 vector_buffer   = [] # 方向缓存
 min_cumulative_baseline = 0.3  # 设定累计基线距离阈值
 
+target_buffer   = [] # 目标缓存
+
 ########################################## 基础函数 ##########################################
 def ROUND(a):
     return (a*100).astype(int)/100
@@ -159,6 +161,17 @@ def get_position_global(sensor_data):
     
     return position
 
+def get_position_cam_global(sensor_data):
+
+    P_Drone_global = get_position_global(sensor_data)   # 无人机全局坐标系下位置
+    Q_Drone2World  = get_quat_from_sensor(sensor_data)  # 无人机四元数
+
+    P_Drone2Cam_Shift_global = vector_rotate(vector_from_drone_to_cam, Q_Drone2World)  # 无人机坐标系下相机位置
+
+    P_Cam_global   = P_Drone_global + P_Drone2Cam_Shift_global  # 相机全局坐标系下位置
+
+    return P_Cam_global
+
 ########################################## 基础函数 ##########################################
 
 
@@ -239,11 +252,11 @@ def img_to_vector(camera_data,
         Vector_Direct_Cam2Target_DroneFrame = np.array([f_pixel, -cam_delta_x, -cam_delta_y])
 
         # 坐标变换
-        Q = get_quat_from_sensor(sensor_data)  
-        Vector_Direct_Cam2Target_WorldFrame = vector_rotate(Vector_Direct_Cam2Target_DroneFrame, Q)  # 旋转向量
+        Q_Drone2World = get_quat_from_sensor(sensor_data)  
 
-        # print(Vector_Direct_Cam2Target_DroneFrame, "world frame", Vector_Direct_Cam2Target_WorldFrame)
-
+        Vector_Direct_Cam2Target_WorldFrame = vector_rotate(Vector_Direct_Cam2Target_DroneFrame, Q_Drone2World)  # Body Frame -> World Frame
+        vector_Drone2Cam_WorldFrame         = vector_rotate(vector_from_drone_to_cam, Q_Drone2World)             # Body Frame -> World Frame
+    
         return Vector_Direct_Cam2Target_WorldFrame / np.linalg.norm(Vector_Direct_Cam2Target_WorldFrame)
 
 
@@ -259,19 +272,10 @@ def img_to_vector(camera_data,
 def target_positioning(P_WorldFrame_New = None, 
                        P_WorldFrame_Old = None,
                        Vector_Direct_Cam2Target_WorldFrame_New = None,
-                       Vector_Direct_Cam2Target_WorldFrame_Old = None,
-                       min_baseline = 0.1): # 最小基线长度
+                       Vector_Direct_Cam2Target_WorldFrame_Old = None): 
 
-    # print(np.array_equal(Vector_Direct_Cam2Target_WorldFrame_New, Vector_Direct_Cam2Target_WorldFrame_Old))
-
-    # 如果没有输入数据，直接返回 None
-    if P_WorldFrame_Old is None or Vector_Direct_Cam2Target_WorldFrame_Old is None:
-        return None
-    elif np.array_equal(P_WorldFrame_New, P_WorldFrame_Old):
-        return None
-    elif np.array_equal(Vector_Direct_Cam2Target_WorldFrame_New, Vector_Direct_Cam2Target_WorldFrame_Old):
-        return None
-    elif Vector_Direct_Cam2Target_WorldFrame_New is None:
+    # 如果方向向量过于接近，返回 None
+    if np.array_equal(Vector_Direct_Cam2Target_WorldFrame_New, Vector_Direct_Cam2Target_WorldFrame_Old):
         return None
     else:
         # 重命名
@@ -282,13 +286,12 @@ def target_positioning(P_WorldFrame_New = None,
 
         # 求解线性方程组
         A = np.array([[r0 @ r0, -r0 @ r1],
-                    [r0 @ r1, -r1 @ r1]])
+                      [r0 @ r1, -r1 @ r1]])
         b = np.array([[r0 @ (P1 - P0)],
                       [r1 @ (P1 - P0)]])
         
         try:
             x, _, _, _ = np.linalg.lstsq(A, b, rcond=None) # 最小二乘法求解，更稳定
-            # x = np.linalg.solve(A, b)
         except np.linalg.LinAlgError:
             print("Error: Singular matrix, cannot solve the system of equations.")
             return None
@@ -304,7 +307,6 @@ def target_positioning(P_WorldFrame_New = None,
 
     # 点1 = [2.12, 1.84, 1.24]
     # 点2 = [5.12, 2.30, 0.78]
-
 ########################################## 三角定位部分 ######################################################
 
 
@@ -314,8 +316,10 @@ def target_positioning(P_WorldFrame_New = None,
 def update_and_compute_target(P_new, vector_new):
     global position_buffer, vector_buffer, min_cumulative_baseline
 
-    position_buffer.append(P_new)
-    vector_buffer.append(vector_new)
+    ## 更新缓存，如果视野内无目标，不能将 None 添加到缓存中
+    if (P_new is not None) and (vector_new is not None):
+        position_buffer.append(P_new)
+        vector_buffer.append(vector_new)
 
     # 计算累计位移
     if len(position_buffer) >= 2: # 至少两帧数据
@@ -325,7 +329,10 @@ def update_and_compute_target(P_new, vector_new):
                                    vector_buffer[-1],vector_buffer[0])
             # 清空缓存
             position_buffer = []
-            vector_buffer = []
+            vector_buffer   = []
+
+            target_buffer.append(T) # 目标缓存
+
             return T
     return None
 ############################################# 三角定位，缓存更新 #############################################
@@ -348,10 +355,6 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
 
     #0000FF 调试区域
     # print(sensor_data)
-
-
-    #0000FF
-
 
     #0000FF 当前控制命令
     # 说明：这里发送什么命令无人机就会到什么地方

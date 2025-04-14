@@ -17,7 +17,7 @@ import cv2 #00FF00 添加测试
 import matplotlib.pyplot as plt
 
 exp_num = 4                        # 0: Coordinate Transformation, 1: PID Tuning, 2: Kalman Filter, 3: Motion Planning, 4: Project
-control_style = 'keyboard'     # 'keyboard' or 'path_planner'
+control_style = 'path_planner'     # 'keyboard' or 'path_planner'
 rand_env = False                   # Randomise the environment
 
 # Global variables for handling threads
@@ -717,12 +717,12 @@ if __name__ == '__main__':
 
                     #0000ff 测试三角定位
                     # 新数据
-                    P_WorldFrame = assignment.get_position_global(sensor_data) 
-                    Vector_Direct_Cam2Target_WorldFrame = assignment.img_to_vector(camera_data, sensor_data)      #0000FF 键盘模式：相机测试
+                    P_Cam_WorldFrame = assignment.get_position_cam_global(sensor_data)     # 获取 #00FF00 相机全局坐标 #00FF00 而不是无人机的
+                    Vector_Cam2Target_WorldFrame = assignment.img_to_vector(camera_data, sensor_data)      #0000FF 键盘模式：相机测试
 
                     #00FF00 Debug
-                    Target_WorldFrame = assignment.update_and_compute_target(P_WorldFrame,
-                                                                             Vector_Direct_Cam2Target_WorldFrame)
+                    Target_WorldFrame = assignment.update_and_compute_target(P_Cam_WorldFrame,
+                                                                             Vector_Cam2Target_WorldFrame)
 
                 elif control_style == 'path_planner':
                     # # Update the setpoint
@@ -742,7 +742,15 @@ if __name__ == '__main__':
 
                         # Read the camera feed 读取相机数据
                         camera_data = drone.read_camera()
-                        assignment.img_to_vector(camera_data, sensor_data.copy()) #0000FF 自动路径：添加测试
+
+                        #0000ff 测试三角定位
+                        # 新数据
+                        P_Cam_WorldFrame = assignment.get_position_cam_global(sensor_data)     # 获取 #00FF00 相机全局坐标 #00FF00 而不是无人机的
+                        Vector_Cam2Target_WorldFrame = assignment.img_to_vector(camera_data, sensor_data)      #0000FF 键盘模式：相机测试
+
+                        #00FF00 Debug
+                        Target_WorldFrame = assignment.update_and_compute_target(P_Cam_WorldFrame,
+                                                                                Vector_Cam2Target_WorldFrame)
 
                         # Update the sensor data in the thread
                         with sensor_lock:
