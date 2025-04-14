@@ -3,20 +3,22 @@ import sys
 print("You are using python at this location:", sys.executable)
 
 import numpy as np
-from controller import Supervisor, Keyboard
+from controller import Supervisor, Keyboard  # type: ignore
 from exercises.ex1_pid_control import quadrotor_controller
 from exercises.ex2_kalman_filter import kalman_filter as KF
 from exercises.ex3_motion_planner import MotionPlanner3D as MP
-import assignment.my_assignment as assignment
+import assignment.my_assignment as assignment    #00FF00 使用自定义代码
 import exercises.ex0_rotations as ex0_rotations
 from scipy.spatial.transform import Rotation as R
 import lib.mapping_and_planning_examples as mapping_and_planning_examples
 import time, random
 import threading
+import cv2 #00FF00 添加测试
+import matplotlib.pyplot as plt
 
-exp_num = 4                    # 0: Coordinate Transformation, 1: PID Tuning, 2: Kalman Filter, 3: Motion Planning, 4: Project
-control_style = 'path_planner'      # 'keyboard' or 'path_planner'
-rand_env = False                # Randomise the environment
+exp_num = 4                        # 0: Coordinate Transformation, 1: PID Tuning, 2: Kalman Filter, 3: Motion Planning, 4: Project
+control_style = 'keyboard'     # 'keyboard' or 'path_planner'
+rand_env = False                   # Randomise the environment
 
 # Global variables for handling threads
 latest_sensor_data = None
@@ -531,7 +533,7 @@ class CrazyflieInDroneDome(Supervisor):
 
         return data
 
-    # Read the camera feed
+    # Read the camera feed 读取相机数据 #0000FF
     def read_camera(self):
 
         # Read the camera image in BRGA format
@@ -622,7 +624,7 @@ class CrazyflieInDroneDome(Supervisor):
         # Update drone states in simulation
         super().step(self.timestep)
 
-# A thread that runs the path planner in parallel with the simulation
+# A thread that runs the path planner in parallel with the simulation 路径规划 #0000FF
 def path_planner_thread(drone):
     global latest_sensor_data, latest_camera_data, current_setpoint, running
 
@@ -654,7 +656,7 @@ def path_planner_thread(drone):
             dt_planner = current_time - last_planner_time
             last_planner_time = current_time
 
-            new_setpoint = assignment.get_command(sensor_data_copy, camera_data_copy, dt_planner)
+            new_setpoint = assignment.get_command(sensor_data_copy, camera_data_copy, dt_planner) #00FF00 使用自定义代码位置
             
             with setpoint_lock:
                 current_setpoint = new_setpoint
@@ -662,6 +664,12 @@ def path_planner_thread(drone):
         time.sleep(0.01)
     
 
+
+
+
+
+
+# 主函数
 if __name__ == '__main__':
 
     # Initialize the drone
@@ -671,7 +679,7 @@ if __name__ == '__main__':
 
     # Start the path planner thread
     if control_style == 'path_planner' and exp_num == 4:
-        planner_thread = threading.Thread(target=path_planner_thread, args=(drone,))
+        planner_thread = threading.Thread(target=path_planner_thread, args=(drone,));    #00FF00 这里就运行了一次，是多线程任务
         planner_thread.daemon = True
         planner_thread.start()
    
@@ -701,7 +709,10 @@ if __name__ == '__main__':
                     control_commands = ex0_rotations.rot_body2inertial(control_commands, euler_angles, quaternion)
 
                     # Call the PID controller to get the motor commands
-                    motorPower = drone.PID_CF.keys_to_pwm(drone.dt_ctrl, control_commands, sensor_data)    
+                    motorPower = drone.PID_CF.keys_to_pwm(drone.dt_ctrl, control_commands, sensor_data)
+                    
+                    camera_data = drone.read_camera()
+                    assignment.img_debug(camera_data)  #0000FF 添加测试
 
                 elif control_style == 'path_planner':
                     # # Update the setpoint
@@ -719,9 +730,10 @@ if __name__ == '__main__':
 
                     else:
 
-                        # Read the camera feed
+                        # Read the camera feed 读取相机数据
                         camera_data = drone.read_camera()
-                        
+                        assignment.img_debug(camera_data) #0000FF 添加测试
+
                         # Update the sensor data in the thread
                         with sensor_lock:
                             latest_sensor_data = sensor_data
