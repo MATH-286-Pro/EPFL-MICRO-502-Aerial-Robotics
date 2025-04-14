@@ -119,9 +119,9 @@ def compute_center(rect, eps=1e-6):
 # 四元数基础函数
 def quat_mutiplication(q1,q2):
     ans = np.array([q1[W]*q2[W] - q1[X]*q2[X] - q1[Y]*q2[Y] - q1[Z]*q2[Z],
-                    q1[W]*q2[W] + q1[X]*q2[X] + q1[Y]*q2[Y] - q1[Z]*q2[Z],
-                    q1[W]*q2[W] - q1[X]*q2[X] + q1[Y]*q2[Y] + q1[Z]*q2[Z],
-                    q1[W]*q2[W] + q1[X]*q2[X] - q1[Y]*q2[Y] + q1[Z]*q2[Z],])
+                    q1[W]*q2[X] + q1[X]*q2[W] + q1[Y]*q2[Z] - q1[Z]*q2[Y],
+                    q1[W]*q2[Y] - q1[X]*q2[Z] + q1[Y]*q2[W] + q1[Z]*q2[X],
+                    q1[W]*q2[Z] + q1[X]*q2[Y] - q1[Y]*q2[X] + q1[Z]*q2[W],])
     return ans
 
 def quat_rotate(P1, Q):
@@ -172,9 +172,9 @@ def img_debug(camera_data,
     binary_mask = cv2.inRange(bgr, lower_pink, upper_pink)
 
     # 可视化 mask 和提取结果
-    cv2.imshow("Gray", binary_mask)                              # 灰度图 / mask
-    pink_only = cv2.bitwise_and(bgr, bgr, mask=binary_mask)      # 应用 mask 扣图
-    cv2.imshow("Pink", pink_only)                                # 粉色图
+    # cv2.imshow("Gray", binary_mask)                              # 灰度图 / mask
+    # pink_only = cv2.bitwise_and(bgr, bgr, mask=binary_mask)      # 应用 mask 扣图
+    # cv2.imshow("Pink", pink_only)                                # 粉色图
 
     # 2.轮廓提取
     contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -213,27 +213,23 @@ def img_debug(camera_data,
         cv2.circle(bgr_image, (cX_pixel, cY_pixel), 5, (0, 255, 0), -1)
         cv2.imshow("Rectangle Corners", bgr_image)
 
-        # #00FF00 
         # 计算目标点位置
         cam_delta_x = rect_center_x - cam_center_x
         cam_delta_y = rect_center_y - cam_center_y
 
-        # print('center %.2f, %.2f' % (cam_delta_x, cam_delta_y))
-
-        # 无人机坐标系：目标方向向量
+        # 无人机坐标系：目标方向向量 √
         Vector_Direct_Cam2Target_DroneFrame = np.array([f_pixel, -cam_delta_x, -cam_delta_y])
+
+        # 坐标变换
+        Q = get_quat_from_sensor(sensor_data)  
+        Vector_Direct_Cam2Target_WolrdFrame = vector_rotate(Vector_Direct_Cam2Target_DroneFrame, Q)  # 旋转向量
+
+        print(Vector_Direct_Cam2Target_DroneFrame, "world frame", Vector_Direct_Cam2Target_WolrdFrame)
 
     else:
         # 将不会显示四个点
         cv2.imshow("Rectangle Corners", bgr_image)
 
-    # 坐标变换
-    Q         = get_quat_from_sensor(sensor_data)  
-    Q_reverse = np.array([Q[W], -Q[X], -Q[Y], -Q[Z]])
-    Vector_Direct_Cam2Target_WolrdFrame = vector_rotate(Vector_Direct_Cam2Target_DroneFrame, Q_reverse)  # 旋转向量
-
-    print(Vector_Direct_Cam2Target_DroneFrame)
-    # print(Vector_Direct_Cam2Target_WolrdFrame)
 
     cv2.waitKey(1)
 
