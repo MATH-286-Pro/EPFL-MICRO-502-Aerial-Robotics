@@ -173,13 +173,14 @@ class Class_Drone_Controller:
 
         # 视觉命令锁
         self.LOCK = False
-        self.LAST_VISION_COMMAND = None # 上一个视觉命令
+        self.IMG_LAST_DIRECTION = None # 上一个视觉方向
 
         # 启动标志
         self.START_FLAG   = False  
 
         # 启动记录
         self.update(sensor_data, camera_data) # 更新数据
+        self.IMG_direction_Initialize()       # 初始化方向
 
         # 记录起始位置
         self.Record_Start_Point()
@@ -240,9 +241,9 @@ class Class_Drone_Controller:
 
             dist = np.linalg.norm(target_pos - drone_pos)    # 计算距离
 
-            # print("dist", dist, "Target", target_pos)
+            print("dist", dist, "Target", target_pos)
 
-            if dist <= 1.0 and self.EXAMING: 
+            if dist <= 0.5 and self.EXAMING: 
                 self.EXAMING = False
                 return True
             else:
@@ -258,7 +259,7 @@ class Class_Drone_Controller:
 
             delta = np.linalg.norm(target_pos_2 - target_pos_1) # 计算增量
 
-            if delta >= 3.0: # 检测到下一个点
+            if delta >= 2.0: # 检测到下一个点
                 self.EXAMING = True
                 return True
             else:
@@ -538,13 +539,29 @@ class Class_Drone_Controller:
 
 
     ############################################ 基于图像控制器 ##############################################
+
+    # 防止开始 Lock 导致的方向错误
+    def IMG_direction_Initialize(self):
+        self.IMG_LAST_DIRECTION = self.Drone_TARGET_VEC_list[4] # 目标方向
+
+    def IMG_direction(self):
+
+        direction = self.Drone_TARGET_VEC_list[4] # 目标方向
+
+        if self.LOCK:
+            return self.IMG_LAST_DIRECTION
+        
+        if not self.LOCK:
+            self.IMG_LAST_DIRECTION = direction.copy() # 记录上一个方向
+            return direction
+
     def IMG_command(self):
 
         # 使用该命令需要确保 看到目标 
 
-        delta_POS = self.Drone_TARGET_VEC_list[4]
+        delta_POS = self.IMG_direction()
         POS = self.update_drone_position_global()
-        POS = POS + delta_POS
+        POS = POS + delta_POS * 1.0
         YAW = self.Drone_YAW_TARGET
 
         command = [POS[X], POS[Y], POS[Z], YAW] # 目标位置 + YAW
@@ -554,13 +571,13 @@ class Class_Drone_Controller:
 
     ############################################### 扫描函数 ##############################################
     def Generate_Scan_Sequence(self):
-        T  = 2
+        T  = 4
         dt = 0.01
 
         t_sequence = np.arange(0, T + dt, dt) # 生成时间序列
 
         YAW_shift  = 20 * deg2arc    # 扫描 震荡角度
-        delta_YAW  = 80 * deg2arc    # 扫描 震荡角度
+        delta_YAW  = 120 * deg2arc    # 扫描 震荡角度
         delta_height = 0.3           # 扫描 震荡高度
 
         omega = 2*np.pi/T
@@ -604,90 +621,6 @@ class Class_Drone_Controller:
 
 
 
-
-
-
-
-
-
-
-
-# # 无人机控制函数
-# def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
-#                 camera_data,  # 相机数据
-#                 dt,           # dt
-#                 ):
-
-#     # NOTE: Displaying the camera image with cv2.imshow() will throw an error because GUI operations should be performed in the main thread.
-#     # If you want to display the camera image you can call it main.py.
-
-#     #0000FF 当前控制命令
-#     global Drone_Controller
-
-#     # 判断是否第一次运行
-#     if Drone_Controller is None:
-#         Drone_Controller = Class_Drone_Controller(sensor_data, camera_data)  # 创建无人机控制器对象
-#         print("Drone_Controller Created")
-
-#     # 无人机状态更新
-#     Drone_Controller.update(sensor_data, camera_data) 
-#     Drone_Controller.Compute_Target_List_with_Buffer() # 测试 list 更新
-
-#     # Take off example
-#     if sensor_data['z_global'] < 0.49:
-#         control_command = [sensor_data['x_global'], sensor_data['y_global'], 1.0, sensor_data['yaw']]
-#         return control_command
-
-#     # ---- YOUR CODE HERE ----
-
-
-
-#     #0000FF 原始控制命令
-#     # control_command = [sensor_data['x_global'], 
-#     #                    sensor_data['y_global'], 
-#     #                    1.0,   # 1.0
-#     #                    sensor_data['yaw']]
-
-
-#     #FF0000         
-#     # 如果没看到粉色 
-#     if Drone_Controller.IMAGE_POINTS is None:
-#         control_command = Drone_Controller.Start_Scan_Command() 
-    
-#     # 如果看到粉色 + 离目标点较远 + 未切换目标
-#     elif (Drone_Controller.IMAGE_POINTS is not None) and Drone_Controller.check_target_arrived() == False and Drone_Controller.check_target_switch() == False:
-#         Drone_Controller.LOCK = False
-#         Drone_Controller.scan_FLAG_RESTART = True        # 重启扫描标志位
-#         control_command = Drone_Controller.IMG_command() # 视觉控制命令
-    
-#     # 如果看到粉色 + 离目标点较近 + 未切换目标
-#     elif (Drone_Controller.IMAGE_POINTS is not None) and Drone_Controller.check_target_arrived() == True and Drone_Controller.check_target_switch() == False:
-#         # print("Close")
-#         if Drone_Controller.LOCK == False:
-#             Drone_Controller.LOCK = True
-#             Drone_Controller.LAST_VISION_COMMAND = Drone_Controller.IMG_command() # 视觉控制命令
-#             print("Lock")
-#         control_command = Drone_Controller.LAST_VISION_COMMAND 
-    
-#     # 如果看到粉色 + 切换目标
-#     elif (Drone_Controller.IMAGE_POINTS is not None) and Drone_Controller.check_target_switch() == True:
-#         Drone_Controller.LOCK = False
-#         control_command = Drone_Controller.IMG_command() # 视觉控制命令
-    
-#     # print(Drone_Controller.LOCK)
-
-#     return control_command 
-
-# Ordered as array with: [pos_x_cmd, 
-#                         pos_y_cmd, 
-#                         pos_z_cmd, 
-#                         yaw_cmd] in meters and radians
-
-
-
-
-
-
 # 无人机控制函数
 def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
                 camera_data,  # 相机数据
@@ -716,55 +649,42 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
 
     # ---- YOUR CODE HERE ----
 
-
-
-    #0000FF 原始控制命令
-    # control_command = [sensor_data['x_global'], 
-    #                    sensor_data['y_global'], 
-    #                    1.0,   # 1.0
-    #                    sensor_data['yaw']]
-
-
     #FF0000         
     # 如果没看到粉色 
     if Drone_Controller.IMAGE_POINTS is None:
         control_command = Drone_Controller.Start_Scan_Command() 
-        if control_command == None:
-            print(1)
+        print(1)
 
     # 如果看到粉色 + 离目标点较远 + 未切换目标
-    elif (Drone_Controller.IMAGE_POINTS is not None) and Drone_Controller.check_target_arrived() == False and Drone_Controller.check_target_switch() == False:
-        Drone_Controller.LOCK = False
+    elif (Drone_Controller.IMAGE_POINTS is not None):
+
         Drone_Controller.scan_FLAG_RESTART = True        # 重启扫描标志位
-        control_command = Drone_Controller.IMG_command() # 视觉控制命令
-        if control_command == None:
+
+        # 距离 Gate 较远 
+        # 需要解锁
+        # 视觉导航
+        if (not Drone_Controller.check_target_arrived()):
+            Drone_Controller.LOCK = False
+            control_command = Drone_Controller.IMG_command()
             print(2)
 
-    # 如果看到粉色 + 离目标点较近 + 未切换目标
-    elif (Drone_Controller.IMAGE_POINTS is not None) and Drone_Controller.check_target_arrived() == True and Drone_Controller.check_target_switch() == False:
-        # print("Close")
-        if Drone_Controller.LOCK == False:
+        # 距离 Gate 较近 
+        # 需要上锁
+        # 上锁导航
+        elif (Drone_Controller.check_target_arrived()):
             Drone_Controller.LOCK = True
-            Drone_Controller.LAST_VISION_COMMAND = Drone_Controller.IMG_command() # 视觉控制命令
-            print("Lock")
-        control_command = Drone_Controller.LAST_VISION_COMMAND 
-        if control_command == None:
+            control_command = Drone_Controller.IMG_command()
             print(3)
 
-    # 如果看到粉色 + 切换目标
-    elif (Drone_Controller.IMAGE_POINTS is not None) and Drone_Controller.check_target_switch() == True:
-        Drone_Controller.LOCK = False
-        control_command = Drone_Controller.IMG_command() # 视觉控制命令
-        if control_command == None:
-            print(4)
-    
-    else:
-        control_command = [sensor_data['x_global'], 
-                           sensor_data['y_global'], 
-                           sensor_data['z_global'],
-                           sensor_data['yaw']]
-            
-    
-    print(control_command)
+
+        # 未知情况
+        else:
+            control_command = [sensor_data['x_global'], 
+                              sensor_data['y_global'], 
+                              sensor_data['z_global'],
+                              sensor_data['yaw']]
+            print(5)
+
+    print(Drone_Controller.check_target_arrived(), Drone_Controller.check_target_switch(), Drone_Controller.RACING_EXPLORE)
 
     return control_command 
