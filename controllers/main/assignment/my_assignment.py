@@ -45,13 +45,13 @@ import cv2
 
 
 # 宏定义
-W = 0  # 四元数下标
-X = 1
-Y = 2
-Z = 3
+X = 0 # 四元数下标
+Y = 1
+Z = 2
+W = 3  
 
 
-# 用户定义变量
+# 用户定义全局变量
 Drone_Controller = None
 
 ########################################## 自定基础函数 ##########################################
@@ -66,22 +66,23 @@ def Unit_Vector(v):
 
 
 # 四元数基础函数
-def quat_mutiplication(q1,q2):
-    ans = np.array([q1[W]*q2[W] - q1[X]*q2[X] - q1[Y]*q2[Y] - q1[Z]*q2[Z],
-                    q1[W]*q2[X] + q1[X]*q2[W] + q1[Y]*q2[Z] - q1[Z]*q2[Y],
-                    q1[W]*q2[Y] - q1[X]*q2[Z] + q1[Y]*q2[W] + q1[Z]*q2[X],
-                    q1[W]*q2[Z] + q1[X]*q2[Y] - q1[Y]*q2[X] + q1[Z]*q2[W],])
-    return ans
+def quat_mutiplication(q1, q2):
+    # 根据 [x, y, z, w] 的公式
+    x = q1[W]*q2[X] + q1[X]*q2[W] + q1[Y]*q2[Z] - q1[Z]*q2[Y]
+    y = q1[W]*q2[Y] - q1[X]*q2[Z] + q1[Y]*q2[W] + q1[Z]*q2[X]
+    z = q1[W]*q2[Z] + q1[X]*q2[Y] - q1[Y]*q2[X] + q1[Z]*q2[W]
+    w = q1[W]*q2[W] - q1[X]*q2[X] - q1[Y]*q2[Y] - q1[Z]*q2[Z]
+    return np.array([x, y, z, w])
 
 def quat_rotate(P1, Q):
-    Q_prim = np.array([Q[W], -Q[X], -Q[Y], -Q[Z]])
+    Q_prim = np.array([-Q[X], -Q[Y], -Q[Z], Q[W]])
     P2 = quat_mutiplication(quat_mutiplication(Q,P1),Q_prim)
     return P2
 
 def vector_rotate(p1, Q):
-    P1 = np.array([0, p1[0], p1[1], p1[2]])
+    P1 = np.array([p1[X], p1[Y], p1[Z], 0]) # 添加 0
     P2 = quat_rotate(P1, Q)
-    return P2[1:4]  # 返回旋转后的向量部分
+    return P2[[X,Y,Z]]     # 返回旋转后的向量部分
 
 
 # 目标中心点基础函数
@@ -130,7 +131,7 @@ class Class_Drone_Controller:
 
         # 基本参数
         self.f_pixel = 161.013922282   # 相机焦距
-        self.vector_Drone2Cam_DroneFrame = np.array([0.03,0,00,0.01]) # 无人机中心到相机偏移向量
+        self.vector_Drone2Cam_DroneFrame = np.array([0.03,0.00,0.01]) # 无人机中心到相机偏移向量
 
         cam_center_y, cam_center_x, _ = camera_data.shape
         self.cam_center_x = cam_center_x / 2 # 像素中心点 x
@@ -185,18 +186,16 @@ class Class_Drone_Controller:
 
     ########################################## 传感器函数 ##########################################
     def get_quat_from_sensor(self):
-        q_x = self.sensor_data['q_x']
-        q_y = self.sensor_data['q_y']
-        q_z = self.sensor_data['q_z']
-        q_w = self.sensor_data['q_w']
-        quat = np.array([q_w, q_x, q_y, q_z])
+        quat = np.array([self.sensor_data['q_x'], 
+                         self.sensor_data['q_y'], 
+                         self.sensor_data['q_z'], 
+                         self.sensor_data['q_w']])
         return quat
 
     def get_position_global(self):
-        x_global = self.sensor_data['x_global']
-        y_global = self.sensor_data['y_global']
-        z_global = self.sensor_data['z_global']
-        position = np.array([x_global, y_global, z_global])
+        position = np.array([self.sensor_data['x_global'], 
+                             self.sensor_data['y_global'], 
+                             self.sensor_data['z_global']])
         return position
 
     def get_position_cam_global(self):
