@@ -15,7 +15,7 @@ WorldInfo {
 }
 Viewpoint {
   orientation -0.15597728809717287 0.6649841582346064 0.7303883589535525 0.6214939871131195
-  position -5.906183215573749 -0.4911343469287026 4.962497731179108
+  position -8.802155807946647 -1.9288285400217005 6.409459047022307
 }
 TexturedBackground {
 }
@@ -234,7 +234,7 @@ DEF TAKE_OFF_PAD Solid {
   boundingObject USE PAD_SHAPE
 }
 DEF FLIGHT_AREA Solid {
-  translation 4 4 0.001
+  translation 4 4 0.02
   children [
     DEF FLIGHT_AREA_SHAPE Shape {
       appearance PBRAppearance {

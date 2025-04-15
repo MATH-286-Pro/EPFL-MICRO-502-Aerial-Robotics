@@ -153,6 +153,7 @@ class Class_Drone_Controller:
         # 计算数据
         self.Drone_Pos_Global    = None  
         self.Drone_target_vec    = None  # 目标方向
+        self.Drone_target_vec_list = []  # 目标方向列表，0-3为矩形的四个点，4为中心点
         self.Drone_target_normal = None  # 目标矩形法向量
         self.Drone_target_YAW    = None
 
@@ -175,8 +176,9 @@ class Class_Drone_Controller:
         self.camera_data_BGR = bgr_image
 
         # 更新位置 + 相机目标
-        self.Drone_Pos_Global = self.get_position_global()  # 无人机全局坐标系下位置
-        self.Drone_target_vec = self.img_to_vector(DEBUG=True)        # 相机坐标系下目标位置
+        self.Drone_Pos_Global = self.get_position_global()         # 无人机全局坐标系下位置
+        self.Drone_target_vec = self.img_to_vector(DEBUG=True)     # 相机坐标系下目标位置
+        self.Drone_target_vec_list = self.img_to_vector_list()     # 相机坐标系下目标位置列表
 
     ########################################## 传感器函数 ##########################################
     def get_quat_from_sensor(self):
@@ -208,6 +210,14 @@ class Class_Drone_Controller:
         P_WorldFrame  = vector_rotate(P_DroneFrame, Q_Drone2World)    # Body Frame -> World Frame
 
         return P_WorldFrame
+
+    def Convert_Frame_Cam2Drone(self, P_CamFrame):
+        cam_delta_x = P_CamFrame[0] - self.cam_center_x
+        cam_delta_y = P_CamFrame[1] - self.cam_center_y
+
+        vector_DroneFrame = np.array([self.f_pixel, -cam_delta_x, -cam_delta_y])
+
+        return vector_DroneFrame
 
 
     ########################################## 图像处理函数 ##########################################
@@ -274,7 +284,7 @@ class Class_Drone_Controller:
             if DEBUG:
                 cv2.imshow("Rectangle Corners", Feature_Frame)
             return None
-        
+
 
     # 图像 -> 方向向量    
     def img_to_vector(self, DEBUG = False):
@@ -290,18 +300,45 @@ class Class_Drone_Controller:
         # 计算向量
         if target_rect is not None:
             
-            # 目标位置：减掉相机中心位置
-            cam_delta_x = target_rect[index_center][0] - self.cam_center_x
-            cam_delta_y = target_rect[index_center][1] - self.cam_center_y
-
-            # 目标方向：无人机坐标系
-            Vector_Cam2Target_DroneFrame = np.array([self.f_pixel, -cam_delta_x, -cam_delta_y])
+            # 目标方向：相机坐标系 -> 无人机坐标系
+            Vector_Cam2Target_DroneFrame = self.Convert_Frame_Cam2Drone(target_rect[index_center]) # 计算相机坐标系下的目标方向
+            Vector_Cam2Target_DroneFrame = Unit_Vector(Vector_Cam2Target_DroneFrame)  # 单位化
 
             # 目标方向：无人机坐标系 -> 世界坐标系
             Vector_Cam2Target_WorldFrame = self.Convert_Frame_Drone2World(Vector_Cam2Target_DroneFrame)
             Vector_Cam2Target_WorldFrame = Unit_Vector(Vector_Cam2Target_WorldFrame)  # 单位化
 
             return Vector_Cam2Target_WorldFrame 
+
+        else:
+            return None
+
+    # 图像 -> 方向向量列表
+    def img_to_vector_list(self, DEBUG = False):
+
+        # 初始化
+        Vector_Cam2Target_WorldFrame_list = []
+
+        # 图像处理
+        cv2.waitKey(1) # 如果放在 return 后面会报错
+        binary_mask = self.img_BGR_to_PINK()                 # 抠图
+        cam_points  = self.img_to_points(binary_mask, DEBUG) # 计算特征点
+        
+        # 计算向量
+        if cam_points is not None:
+            
+            for cam_point in cam_points:
+                # 目标方向：相机坐标系 -> 无人机坐标系
+                Vector_Cam2Target_DroneFrame = self.Convert_Frame_Cam2Drone(cam_point) # 计算相机坐标系下的目标方向
+                Vector_Cam2Target_DroneFrame = Unit_Vector(Vector_Cam2Target_DroneFrame)  # 单位化
+
+                # 目标方向：无人机坐标系 -> 世界坐标系
+                Vector_Cam2Target_WorldFrame = self.Convert_Frame_Drone2World(Vector_Cam2Target_DroneFrame)
+                Vector_Cam2Target_WorldFrame = Unit_Vector(Vector_Cam2Target_WorldFrame)  # 单位化
+
+                Vector_Cam2Target_WorldFrame_list.append(Vector_Cam2Target_WorldFrame)    # 添加到列表中
+
+            return Vector_Cam2Target_WorldFrame_list 
 
         else:
             return None
@@ -385,9 +422,8 @@ class Class_Drone_Controller:
         return None
     ############################################# 计算目标 YAW #############################################
     def Compute_YAW(self):
-        Vector_3D = self.target_buffer[-1] - self.Drone_Pos_Global
-        Vector_2D = Vector_3D[:2]  # 只取前两个分量 (x, y)
-        self.Drone_target_YAW = np.arctan2(Vector_2D[1], Vector_2D[0])  # 计算 YAW 角度
+        Vector_3D = self.Drone_target_vec
+        self.Drone_target_YAW = np.arctan2(Vector_3D[1], Vector_3D[0])  # 计算 YAW 角度
 
 
 
@@ -432,7 +468,7 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
     if Drone_Controller.target_buffer:
         TARGET = Drone_Controller.target_buffer[-1]
         control_command = [TARGET[0] + 0.2, # 这里需要修改，需要视觉计算粉色矩形的法向量
-                           TARGET[1] + 0.2,
+                           TARGET[1] - 0.2,
                            TARGET[2],
                            Drone_Controller.Drone_target_YAW]  # 目标 YAW
 
