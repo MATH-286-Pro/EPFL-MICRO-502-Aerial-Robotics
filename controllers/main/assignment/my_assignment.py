@@ -50,6 +50,8 @@ X = 0 # 四元数下标
 Y = 1
 Z = 2
 W = 3  
+arc2deg = 180/np.pi
+deg2arc = np.pi/180
 
 
 # 用户定义全局变量
@@ -121,7 +123,7 @@ def compute_target_center(rect, eps=1e-6):
 # 定义无人机类
 class Class_Drone_Controller:
 
-    def __init__(self):
+    def __init__(self, sensor_data, camera_data):
 
         # 基本参数
         self.f_pixel = 161.013922282   # 相机焦距
@@ -158,9 +160,32 @@ class Class_Drone_Controller:
 
         self.target_pos_list_buffer = [] # 有效目标缓存列表
 
-        # 启动标志
-        self.START_FLAG       = False  
+        # 路径数据记录
+        self.RACING_START_POINT  = None
+        self.RACING_MID_POINT    = None
 
+        self.EXAMING             = True
+        self.RACING_EXPLORE      = 0     
+        self.RACING_EXPLORE_DONE = False # 是否完成探索，默认开始能检测到第一个点
+
+        self.RACING_BEGIN_INDEX        = [0] # 记录索引，用于记录 某个Gate 起始 index
+        self.RACING_END_INDEX          = []  # 记录索引，用于记录 某个Gate 结束 index
+
+        # 视觉命令锁
+        self.LOCK = False
+        self.LAST_VISION_COMMAND = None # 上一个视觉命令
+
+        # 启动标志
+        self.START_FLAG   = False  
+
+        # 启动记录
+        self.update(sensor_data, camera_data) # 更新数据
+
+        # 记录起始位置
+        self.Record_Start_Point()
+
+        # 生成扫描偏移序列
+        self.Generate_Scan_Sequence() 
 
     ########################################## 更新函数 ##########################################
 
@@ -182,6 +207,9 @@ class Class_Drone_Controller:
         self.update_camera_position_global()   # 更新相机坐标
         self.update_img2vector_list(DEBUG = True)     # 相机坐标系下目标位置列表
 
+        # 检查 + 记录目标点
+        self.Record_Mid_Point()                # 记录中间点
+
     ########################################## 传感器函数 ##########################################
     def update_drone_quat(self):
         quat = np.array([self.sensor_data['q_x'], 
@@ -195,6 +223,7 @@ class Class_Drone_Controller:
                              self.sensor_data['y_global'], 
                              self.sensor_data['z_global']])
         self.Drone_POS_GLOBAL = position
+        return position
 
     def update_camera_position_global(self):
         P_Drone_global = self.Drone_POS_GLOBAL      # 无人机全局坐标系下位置
@@ -203,6 +232,40 @@ class Class_Drone_Controller:
         P_Cam_global   = P_Drone_global + P_Drone2Cam_Shift_global     
         self.Camera_POS_GLOBAL =  P_Cam_global   # 相机全局坐标系下位置
     
+    def check_target_arrived(self):
+        
+        try:
+            target_pos = self.target_pos_list_buffer[-1][4]  # 目标位置
+            drone_pos  = self.update_drone_position_global() # 无人机位置
+
+            dist = np.linalg.norm(target_pos - drone_pos)    # 计算距离
+
+            # print("dist", dist, "Target", target_pos)
+
+            if dist <= 1.0 and self.EXAMING: 
+                self.EXAMING = False
+                return True
+            else:
+                return False
+        except IndexError:
+            return False
+    
+    def check_target_switch(self):
+
+        try:
+            target_pos_1 = self.target_pos_list_buffer[-2][4]  # 目标位置
+            target_pos_2 = self.target_pos_list_buffer[-1][4]  # 目标位置
+
+            delta = np.linalg.norm(target_pos_2 - target_pos_1) # 计算增量
+
+            if delta >= 3.0: # 检测到下一个点
+                self.EXAMING = True
+                return True
+            else:
+                return False
+            
+        except IndexError:
+            return False
     ########################################## 坐标变换函数 ##########################################
     def Convert_Frame_Drone2World(self, P_DroneFrame):
         Q_Drone2World = self.Q  
@@ -353,8 +416,6 @@ class Class_Drone_Controller:
             T1 = P1 + x[1] * r1
             T = (T0 + T1) / 2
 
-        # print("目标全局坐标：",T)
-
         return T
 
 
@@ -385,16 +446,16 @@ class Class_Drone_Controller:
                                                                  self.Drone_Target_Vec_List_Buffer[-1][i],
                                                                  self.Drone_Target_Vec_List_Buffer[0][i])
 
-                print("目标全局坐标：",Target_Pos_list[-1], self.Drone_Target_Vec_List_Buffer[-1][4])
+                # print("目标全局坐标：",Target_Pos_list[-1], self.Drone_Target_Vec_List_Buffer[-1][4])
 
                 # 缓存清空 #FF0000 需要修改逻辑，充分利用数据
-                # self.Drone_Pos_Buffer             = [] # 清空缓存
-                # self.Drone_Target_Vec_List_Buffer = []
+                self.Drone_Pos_Buffer             = [] # 清空缓存
+                self.Drone_Target_Vec_List_Buffer = []
 
-                # 缓存保留部分数据
-                length = len(self.Drone_Pos_Buffer)
-                self.Drone_Pos_Buffer = [self.Drone_Pos_Buffer[length - 2]]                         # 保留帧数据
-                self.Drone_Target_Vec_List_Buffer = [self.Drone_Target_Vec_List_Buffer[length - 2]] # 保留帧数据
+                # # 缓存保留部分数据
+                # length = len(self.Drone_Pos_Buffer)
+                # self.Drone_Pos_Buffer = [self.Drone_Pos_Buffer[length - 2]]                         # 保留帧数据
+                # self.Drone_Target_Vec_List_Buffer = [self.Drone_Target_Vec_List_Buffer[length - 2]] # 保留帧数据
 
                 # 更新目标值
                 self.target_pos_list_buffer.append(Target_Pos_list) # 目标缓存
@@ -426,15 +487,37 @@ class Class_Drone_Controller:
         self.Drone_YAW_NORMAL = normal_angle 
         self.Drone_YAW_NORMAL_VEC = normal_vector
 
+    ############################################## 目标点记录函数 ##############################################
+
+    # 记录起点位置
+    def Record_Start_Point(self):
+        POS = self.update_drone_position_global()
+        YAW = self.sensor_data['yaw']
+        self.RACING_START_POINT = [POS[X], POS[Y], 1.0, YAW] 
+    
+    # 记录 Gate 位置
+    def Record_Mid_Point(self):
+        
+        if self.check_target_switch():
+            self.RACING_BEGIN_INDEX.append(len(self.target_pos_list_buffer) - 1) # 记录索引
+        
+        if self.check_target_arrived():
+            self.RACING_END_INDEX.append(len(self.target_pos_list_buffer))
+            self.RACING_EXPLORE += 1
+            print("Gate %d Arrived" % self.RACING_EXPLORE)
+        
+        if self.RACING_EXPLORE >= 5:
+            self.RACING_EXPLORE_DONE = True
+        
     ############################################## 轨迹生成函数 ##############################################
 
     def Generate_Trajectory(self, T = 3, dt = 0.1):
         p0 = self.Camera_POS_GLOBAL
-        pT  = self.target_pos_list_buffer[-1][4] + self.Drone_YAW_NORMAL_VEC * 0.8
+        pT  = self.target_pos_list_buffer[0][4] + self.Drone_YAW_NORMAL_VEC * 0.8 # 使用第一个目标点测试
 
         v0 = np.array([self.sensor_data['v_x'],
-                                self.sensor_data['v_y'],
-                                self.sensor_data['v_z']])
+                        self.sensor_data['v_y'],
+                        self.sensor_data['v_z']])
         vT  = self.Drone_YAW_NORMAL_VEC
 
         # 根据起始条件构建三次多项式的系数
@@ -448,9 +531,66 @@ class Class_Drone_Controller:
         t_vals = np.arange(0, T + dt, dt)
         trajectory = np.array([a0 + a1 * t + a2 * t**2 + a3 * t**3 for t in t_vals])
 
+        self.test_trajectory     = trajectory.copy() # 测试轨迹
+        self.test_trajectory_idx = 0
+
         return trajectory
 
 
+    ############################################ 基于图像控制器 ##############################################
+    def IMG_command(self):
+
+        # 使用该命令需要确保 看到目标 
+
+        delta_POS = self.Drone_TARGET_VEC_list[4]
+        POS = self.update_drone_position_global()
+        POS = POS + delta_POS
+        YAW = self.Drone_YAW_TARGET
+
+        command = [POS[X], POS[Y], POS[Z], YAW] # 目标位置 + YAW
+
+        return command
+
+
+    ############################################### 扫描函数 ##############################################
+    def Generate_Scan_Sequence(self):
+        T  = 2
+        dt = 0.01
+
+        t_sequence = np.arange(0, T + dt, dt) # 生成时间序列
+
+        YAW_shift  = 20 * deg2arc    # 扫描 震荡角度
+        delta_YAW  = 80 * deg2arc    # 扫描 震荡角度
+        delta_height = 0.3           # 扫描 震荡高度
+
+        omega = 2*np.pi/T
+
+        self.scan_index        = 0    # 初始化索引
+        self.scan_FLAG_RESTART = True # 初始化重启标志 
+        self.scan_max_index    = T/dt
+        self.squence_Shift_YAW    = np.sin( omega * t_sequence) * delta_YAW / 2  + YAW_shift
+        self.squence_Shift_Height = np.sin( omega * t_sequence) * delta_height / 2
+    
+    def Start_Scan_Command(self):
+        if self.scan_FLAG_RESTART:
+            self.scan_index = 0
+            self.scan_FLAG_RESTART = False
+
+            self.scan_POS = self.update_drone_position_global()
+            self.scan_YAW = self.sensor_data['yaw']
+            print("Scan Restart")
+        
+        if self.scan_index >= self.scan_max_index:
+            self.scan_index = 0
+
+        command = [self.scan_POS[X],
+                   self.scan_POS[Y],
+                   self.scan_POS[Z] + self.squence_Shift_Height[self.scan_index], # 高度
+                   self.scan_YAW    + self.squence_Shift_YAW[self.scan_index]]
+        
+        self.scan_index += 1
+
+        return command
 
 
 
@@ -464,6 +604,84 @@ class Class_Drone_Controller:
 
 
 
+
+
+
+
+
+
+
+
+# # 无人机控制函数
+# def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
+#                 camera_data,  # 相机数据
+#                 dt,           # dt
+#                 ):
+
+#     # NOTE: Displaying the camera image with cv2.imshow() will throw an error because GUI operations should be performed in the main thread.
+#     # If you want to display the camera image you can call it main.py.
+
+#     #0000FF 当前控制命令
+#     global Drone_Controller
+
+#     # 判断是否第一次运行
+#     if Drone_Controller is None:
+#         Drone_Controller = Class_Drone_Controller(sensor_data, camera_data)  # 创建无人机控制器对象
+#         print("Drone_Controller Created")
+
+#     # 无人机状态更新
+#     Drone_Controller.update(sensor_data, camera_data) 
+#     Drone_Controller.Compute_Target_List_with_Buffer() # 测试 list 更新
+
+#     # Take off example
+#     if sensor_data['z_global'] < 0.49:
+#         control_command = [sensor_data['x_global'], sensor_data['y_global'], 1.0, sensor_data['yaw']]
+#         return control_command
+
+#     # ---- YOUR CODE HERE ----
+
+
+
+#     #0000FF 原始控制命令
+#     # control_command = [sensor_data['x_global'], 
+#     #                    sensor_data['y_global'], 
+#     #                    1.0,   # 1.0
+#     #                    sensor_data['yaw']]
+
+
+#     #FF0000         
+#     # 如果没看到粉色 
+#     if Drone_Controller.IMAGE_POINTS is None:
+#         control_command = Drone_Controller.Start_Scan_Command() 
+    
+#     # 如果看到粉色 + 离目标点较远 + 未切换目标
+#     elif (Drone_Controller.IMAGE_POINTS is not None) and Drone_Controller.check_target_arrived() == False and Drone_Controller.check_target_switch() == False:
+#         Drone_Controller.LOCK = False
+#         Drone_Controller.scan_FLAG_RESTART = True        # 重启扫描标志位
+#         control_command = Drone_Controller.IMG_command() # 视觉控制命令
+    
+#     # 如果看到粉色 + 离目标点较近 + 未切换目标
+#     elif (Drone_Controller.IMAGE_POINTS is not None) and Drone_Controller.check_target_arrived() == True and Drone_Controller.check_target_switch() == False:
+#         # print("Close")
+#         if Drone_Controller.LOCK == False:
+#             Drone_Controller.LOCK = True
+#             Drone_Controller.LAST_VISION_COMMAND = Drone_Controller.IMG_command() # 视觉控制命令
+#             print("Lock")
+#         control_command = Drone_Controller.LAST_VISION_COMMAND 
+    
+#     # 如果看到粉色 + 切换目标
+#     elif (Drone_Controller.IMAGE_POINTS is not None) and Drone_Controller.check_target_switch() == True:
+#         Drone_Controller.LOCK = False
+#         control_command = Drone_Controller.IMG_command() # 视觉控制命令
+    
+#     # print(Drone_Controller.LOCK)
+
+#     return control_command 
+
+# Ordered as array with: [pos_x_cmd, 
+#                         pos_y_cmd, 
+#                         pos_z_cmd, 
+#                         yaw_cmd] in meters and radians
 
 
 
@@ -479,6 +697,18 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
     # NOTE: Displaying the camera image with cv2.imshow() will throw an error because GUI operations should be performed in the main thread.
     # If you want to display the camera image you can call it main.py.
 
+    #0000FF 当前控制命令
+    global Drone_Controller
+
+    # 判断是否第一次运行
+    if Drone_Controller is None:
+        Drone_Controller = Class_Drone_Controller(sensor_data, camera_data)  # 创建无人机控制器对象
+        print("Drone_Controller Created")
+
+    # 无人机状态更新
+    Drone_Controller.update(sensor_data, camera_data) 
+    Drone_Controller.Compute_Target_List_with_Buffer() # 测试 list 更新
+
     # Take off example
     if sensor_data['z_global'] < 0.49:
         control_command = [sensor_data['x_global'], sensor_data['y_global'], 1.0, sensor_data['yaw']]
@@ -486,53 +716,55 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
 
     # ---- YOUR CODE HERE ----
 
-    global Drone_Controller
 
 
     #0000FF 原始控制命令
-    control_command = [sensor_data['x_global'], 
-                       sensor_data['y_global'], 
-                       1.0,   # 1.0
-                       sensor_data['yaw']]
+    # control_command = [sensor_data['x_global'], 
+    #                    sensor_data['y_global'], 
+    #                    1.0,   # 1.0
+    #                    sensor_data['yaw']]
 
-    #0000FF 当前控制命令
-    # 判断是否第一次运行
-    if Drone_Controller is None:
-        Drone_Controller = Class_Drone_Controller()  # 创建无人机控制器对象
-        print("Drone_Controller Created")
 
-    # 无人机状态更新
-    Drone_Controller.update(sensor_data, camera_data) 
-    Drone_Controller.Compute_Target_List_with_Buffer() # 测试 list 更新
+    #FF0000         
+    # 如果没看到粉色 
+    if Drone_Controller.IMAGE_POINTS is None:
+        control_command = Drone_Controller.Start_Scan_Command() 
+        if control_command == None:
+            print(1)
 
-    #FF0000 
-    # 说明：这里发送什么命令无人机就会到什么地方
+    # 如果看到粉色 + 离目标点较远 + 未切换目标
+    elif (Drone_Controller.IMAGE_POINTS is not None) and Drone_Controller.check_target_arrived() == False and Drone_Controller.check_target_switch() == False:
+        Drone_Controller.LOCK = False
+        Drone_Controller.scan_FLAG_RESTART = True        # 重启扫描标志位
+        control_command = Drone_Controller.IMG_command() # 视觉控制命令
+        if control_command == None:
+            print(2)
 
-    # 如果看到粉色 + 目标不为空
-    if Drone_Controller.target_pos_list_buffer and Drone_Controller.IMAGE_POINTS is not None:
-        TARGET = Drone_Controller.target_pos_list_buffer[-1][4]
-        # print(TARGET)
+    # 如果看到粉色 + 离目标点较近 + 未切换目标
+    elif (Drone_Controller.IMAGE_POINTS is not None) and Drone_Controller.check_target_arrived() == True and Drone_Controller.check_target_switch() == False:
+        # print("Close")
+        if Drone_Controller.LOCK == False:
+            Drone_Controller.LOCK = True
+            Drone_Controller.LAST_VISION_COMMAND = Drone_Controller.IMG_command() # 视觉控制命令
+            print("Lock")
+        control_command = Drone_Controller.LAST_VISION_COMMAND 
+        if control_command == None:
+            print(3)
 
-        control_command = [TARGET[0], # 这里需要修改，需要视觉计算粉色矩形的法向量
-                           TARGET[1],
-                           TARGET[2],
-                           Drone_Controller.Drone_YAW_TARGET]  # 目标 YAW
-        
-        # control_command = [TARGET[0] , # 这里需要修改，需要视觉计算粉色矩形的法向量
-        #                    TARGET[1] ,
-        #                    TARGET[2],
-        #                    sensor_data['yaw'] + 0.15]  # 目标 YAW
+    # 如果看到粉色 + 切换目标
+    elif (Drone_Controller.IMAGE_POINTS is not None) and Drone_Controller.check_target_switch() == True:
+        Drone_Controller.LOCK = False
+        control_command = Drone_Controller.IMG_command() # 视觉控制命令
+        if control_command == None:
+            print(4)
     
-    # 如果没看到粉色
-    elif Drone_Controller.IMAGE_POINTS is None:
+    else:
         control_command = [sensor_data['x_global'], 
-                          sensor_data['y_global'], 
-                          sensor_data['z_global'],   # 1.0
-                          sensor_data['yaw'] + 0.15]
+                           sensor_data['y_global'], 
+                           sensor_data['z_global'],
+                           sensor_data['yaw']]
+            
     
-    return control_command 
+    print(control_command)
 
-# Ordered as array with: [pos_x_cmd, 
-#                         pos_y_cmd, 
-#                         pos_z_cmd, 
-#                         yaw_cmd] in meters and radians
+    return control_command 

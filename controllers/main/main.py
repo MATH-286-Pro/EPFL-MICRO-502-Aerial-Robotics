@@ -678,9 +678,6 @@ if __name__ == '__main__':
     assert control_style in ['keyboard','path_planner'], "Variable control_style must either be 'keyboard' or 'path_planner'"
     assert exp_num in [0,1,2,3,4], "Exp_num must be a value between 0 and 4"
 
-    #00FF00 初始化
-    Drone_Controller = assignment.Class_Drone_Controller()
-
     # Start the path planner thread
     if control_style == 'path_planner' and exp_num == 4:
         planner_thread = threading.Thread(target=path_planner_thread, args=(drone,));    #00FF00 这里就运行了一次，是多线程任务
@@ -718,8 +715,8 @@ if __name__ == '__main__':
                     camera_data = drone.read_camera()
 
                     #00FF00 类更新
-                    Drone_Controller.update(sensor_data, camera_data) 
-                    Drone_Controller.Compute_Target_With_Buffer()
+                    # Drone_Controller.update(sensor_data, camera_data) 
+                    # Drone_Controller.Compute_Target_With_Buffer()
 
 
                 elif control_style == 'path_planner':
