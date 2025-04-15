@@ -50,6 +50,11 @@ X = 1
 Y = 2
 Z = 3
 
+
+# 用户定义变量
+Drone_Controller = None
+
+
 # 单位化函数
 def Unit_Vector(v):
     norm = np.linalg.norm(v)
@@ -126,7 +131,11 @@ class Class_Drone_Controller:
 
         # 计算数据
         self.Drone_Pos_Global = None  
-        self.Drone_target_vec = None  
+        self.Drone_target_vec = None 
+        self.Drone_target_YAW = None
+
+        # 启动标志
+        self.START_FLAG       = False  
 
 
     ########################################## 更新函数 ##########################################
@@ -320,16 +329,18 @@ class Class_Drone_Controller:
                 self.position_buffer = []
                 self.vector_buffer   = []
 
+                # 更新目标值
                 self.target_buffer.append(T) # 目标缓存
-
-                print(T)
-
+                self.Compute_YAW() # 计算目标 YAW
+                
                 return T
         
         return None
-    ############################################# 三角定位，缓存更新 #############################################
-
-
+    ############################################# 计算目标 YAW #############################################
+    def Compute_YAW(self):
+        Vector_3D = self.target_buffer[-1] - self.Drone_Pos_Global
+        Vector_2D = Vector_3D[:2]  # 只取前两个分量 (x, y)
+        self.Drone_target_YAW = np.arctan2(Vector_2D[1], Vector_2D[0])  # 计算 YAW 角度
 
 
 
@@ -337,7 +348,6 @@ class Class_Drone_Controller:
 def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
                 camera_data,  # 相机数据
                 dt,           # dt
-                Drone_Controller # 无人机控制器类
                 ):
 
     # NOTE: Displaying the camera image with cv2.imshow() will throw an error because GUI operations should be performed in the main thread.
@@ -350,24 +360,35 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
 
     # ---- YOUR CODE HERE ----
 
-    #0000FF 调试区域
-    # print(sensor_data)
+    global Drone_Controller
 
-    #0000FF 当前控制命令
-    # 说明：这里发送什么命令无人机就会到什么地方
 
+    #0000FF 原始控制命令
     control_command = [sensor_data['x_global'], 
                        sensor_data['y_global'], 
                        1.0,   # 1.0
                        sensor_data['yaw']]
-    
+
+    #0000FF 当前控制命令
+    # 判断是否第一次运行
+    if Drone_Controller is None:
+        Drone_Controller = Class_Drone_Controller()  # 创建无人机控制器对象
+        print("Drone_Controller Created")
+
+    # 无人机状态更新
+    Drone_Controller.update(sensor_data, camera_data) 
+    Drone_Controller.Compute_Target_With_Buffer()
+
+    # 说明：这里发送什么命令无人机就会到什么地方
+
+
     #FF0000 目标测试
-    if Drone_Controller.target_buffer[-1] is not None:
+    if Drone_Controller.target_buffer:
         TARGET = Drone_Controller.target_buffer[-1]
-    control_command = [TARGET[0],
-                       TARGET[1],
-                       TARGET[2],
-                       sensor_data['yaw']]
+        control_command = [TARGET[0] + 0.2, # 这里需要修改，需要视觉计算粉色矩形的法向量
+                           TARGET[1] + 0.2,
+                           TARGET[2],
+                           Drone_Controller.Drone_target_YAW]  # 目标 YAW
 
     
     return control_command 
