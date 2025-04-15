@@ -54,6 +54,7 @@ Z = 3
 # 用户定义变量
 Drone_Controller = None
 
+########################################## 自定基础函数 ##########################################
 
 # 单位化函数
 def Unit_Vector(v):
@@ -87,10 +88,10 @@ def vector_rotate(p1, Q):
 def compute_target_center(rect, eps=1e-6):
 
     # 取出四个点
-    x0, y0 = rect[0, 0]
-    x1, y1 = rect[1, 0]
-    x2, y2 = rect[2, 0]
-    x3, y3 = rect[3, 0]
+    x0, y0 = rect[0]
+    x1, y1 = rect[1]
+    x2, y2 = rect[2]
+    x3, y3 = rect[3]
 
     # 计算分母
     denom = (x0 - x2) * (y1 - y3) - (y0 - y2) * (x1 - x3)
@@ -106,33 +107,54 @@ def compute_target_center(rect, eps=1e-6):
     x = (det1 * (x1 - x3) - (x0 - x2) * det2) / denom
     y = (det1 * (y1 - y3) - (y0 - y2) * det2) / denom
 
-    return x, y
+    center = np.array([x, y])
+
+    return center
+
+# 计算目标法向量
+def compute_normal_vector(v1,v2):
+    # 说明：从 v1 到 v2 右手定律，大拇指为计算法向量
+    normal = np.cross(v1, v2)     # 计算法向量
+    normal = Unit_Vector(normal)  # 单位化
+    return normal
+
+########################################## 自定基础函数 ##########################################
+
+
 
 
 # 定义无人机类
 class Class_Drone_Controller:
 
-    def __init__(self):
+    def __init__(self, camera_data):
 
         # 基本参数
         self.f_pixel = 161.013922282   # 相机焦距
         self.vector_Drone2Cam_DroneFrame = np.array([0.03,0,00,0.01]) # 无人机中心到相机偏移向量
+
+        cam_center_y, cam_center_x, _ = camera_data.shape
+        self.cam_center_x = cam_center_x / 2 # 像素中心点 x
+        self.cam_center_y = cam_center_y / 2 # 像素中心点 y
         
         # 全局变量 (三角定位)
         self.position_buffer = [] # 位置缓存
         self.vector_buffer   = [] # 方向缓存
         self.min_cumulative_baseline = 0.3  # 设定累计基线距离阈值
 
-        self.target_buffer   = [] # 目标缓存
+        self.valid_pos_buffer = [] # 有效位置缓存
+        self.valid_vec_buffer   = [] # 有效方向缓存
+        self.target_buffer         = [] # 有效目标缓存
 
         # 无人机信息
-        self.sensor_data    = None  # 无人机传感器数据
-        self.camera_data    = None  # 相机数据
+        self.sensor_data     = None  # 无人机传感器数据
+        self.camera_data     = None  # 相机数据
+        self.camera_data_BGR = None  # 相机数据 BGR
 
         # 计算数据
-        self.Drone_Pos_Global = None  
-        self.Drone_target_vec = None 
-        self.Drone_target_YAW = None
+        self.Drone_Pos_Global    = None  
+        self.Drone_target_vec    = None  # 目标方向
+        self.Drone_target_normal = None  # 目标矩形法向量
+        self.Drone_target_YAW    = None
 
         # 启动标志
         self.START_FLAG       = False  
@@ -140,16 +162,21 @@ class Class_Drone_Controller:
 
     ########################################## 更新函数 ##########################################
 
-    # 更新无人机位置 + 更新相机数据
+    #00FF00 更新无人机位置 + 更新相机数据 #00FF00
     def update(self, sensor_data, camera_data):
         
         # 更新数据 + 相机
         self.sensor_data  = sensor_data
         self.camera_data  = camera_data
 
+        # 原始图像转为 BGR 图像（忽略 Alpha 图层）
+        b, g, r, a           = cv2.split(self.camera_data)
+        bgr_image            = cv2.merge([b, g, r])
+        self.camera_data_BGR = bgr_image
+
         # 更新位置 + 相机目标
         self.Drone_Pos_Global = self.get_position_global()  # 无人机全局坐标系下位置
-        self.Drone_target_vec = self.img_to_vector()        # 相机坐标系下目标位置
+        self.Drone_target_vec = self.img_to_vector(DEBUG=True)        # 相机坐标系下目标位置
 
     ########################################## 传感器函数 ##########################################
     def get_quat_from_sensor(self):
@@ -184,19 +211,11 @@ class Class_Drone_Controller:
 
 
     ########################################## 图像处理函数 ##########################################
-    def img_to_vector(self):
 
-        # 原始 BGR 图像（忽略 Alpha）
-        b, g, r, a = cv2.split(self.camera_data)
-        bgr_image  = cv2.merge([b, g, r])
+    # 图像 -> 粉色 mask
+    def img_BGR_to_PINK(self, DEBUG = False):
 
-        # 获取图像中心位置
-        cam_center_y, cam_center_x, _ = bgr_image.shape
-        cam_center_x /= 2
-        cam_center_y /= 2
-
-        # 直接用 RGB 图像扣图
-        bgr = bgr_image.copy()
+        bgr = self.camera_data_BGR.copy()
 
         # OpenCV 是 BGR 顺序！
         upper_pink  = np.array([255, 185, 255])  # B, G, R
@@ -204,18 +223,22 @@ class Class_Drone_Controller:
         binary_mask = cv2.inRange(bgr, lower_pink, upper_pink)
 
         # 可视化 mask 和提取结果
-        # cv2.imshow("Gray", binary_mask)                              # 灰度图 / mask
-        # pink_only = cv2.bitwise_and(bgr, bgr, mask=binary_mask)      # 应用 mask 扣图
-        # cv2.imshow("Pink", pink_only)                                # 粉色图
+        if DEBUG:
+            cv2.imshow("Gray", binary_mask)                              # 灰度图 / mask
+            pink_only = cv2.bitwise_and(bgr, bgr, mask=binary_mask)      # 应用 mask 扣图
+            cv2.imshow("Pink", pink_only)                                # 粉色图
 
-        # 2.轮廓提取
+        return binary_mask
+
+    # 图像 -> 特征点
+    def img_to_points(self, binary_mask, DEBUG = False):
+        
+        # 1.轮廓提取
         contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # 3.轮廓近似
-        # 遍历所有轮廓，找到拟合为四边形且面积最大的那个
+        # 2.轮廓近似 (遍历所有轮廓，找到拟合为四边形且面积最大的那个)
         largest_rect = None
         max_area = 0  # 用于记录当前最大的面积
-
         for cnt in contours:
             # 计算轮廓周长
             peri = cv2.arcLength(cnt, True)
@@ -229,26 +252,47 @@ class Class_Drone_Controller:
                 if area > max_area:
                     max_area = area
                     largest_rect = approx
-
-        # 4. 可视化
-        # 看见方框
-        cv2.waitKey(1) # 如果放在 return 后面会报错
-
-        if largest_rect is not None:
             
-            # 计算中心点
-            rect_center_x, rect_center_y = compute_target_center(largest_rect) # np.Float64
+        # 复制帧，防止闪烁
+        Feature_Frame = self.camera_data_BGR.copy()
+
+        # 特征点提取
+        if largest_rect is not None:
+            largest_rect = np.squeeze(largest_rect, axis=1)                     # 将 4x1x2 的数组转换为 4x2 的数组
+            rect_center  = compute_target_center(largest_rect)                  # np.Float64
+            target_rect  = np.append(largest_rect, [rect_center], axis = 0)     # 添加中心点
 
             # 在原图上画出四个点
-            for point in largest_rect:
-                x, y = point[0]
-                cv2.circle(bgr_image, (x, y), 5, (0, 255, 0), -1)
-            cv2.circle(bgr_image, (int(rect_center_x), int(rect_center_y)), 5, (0, 255, 0), -1)
-            cv2.imshow("Rectangle Corners", bgr_image)
+            if DEBUG:
+                for x, y in target_rect:
+                    cv2.circle(Feature_Frame, (int(x), int(y)), 5, (0, 255, 0), -1)
+                cv2.imshow("Rectangle Corners", Feature_Frame)
+            
+            return target_rect # 返回拟合的 四边形顶点 + 中心点
+        
+        else:
+            if DEBUG:
+                cv2.imshow("Rectangle Corners", Feature_Frame)
+            return None
+        
 
+    # 图像 -> 方向向量    
+    def img_to_vector(self, DEBUG = False):
+
+        # 定义索引
+        index_center = 4
+
+        # 图像处理
+        cv2.waitKey(1) # 如果放在 return 后面会报错
+        binary_mask = self.img_BGR_to_PINK()                 # 抠图
+        target_rect = self.img_to_points(binary_mask, DEBUG) # 计算特征点
+        
+        # 计算向量
+        if target_rect is not None:
+            
             # 目标位置：减掉相机中心位置
-            cam_delta_x = rect_center_x - cam_center_x
-            cam_delta_y = rect_center_y - cam_center_y
+            cam_delta_x = target_rect[index_center][0] - self.cam_center_x
+            cam_delta_y = target_rect[index_center][1] - self.cam_center_y
 
             # 目标方向：无人机坐标系
             Vector_Cam2Target_DroneFrame = np.array([self.f_pixel, -cam_delta_x, -cam_delta_y])
@@ -259,9 +303,7 @@ class Class_Drone_Controller:
 
             return Vector_Cam2Target_WorldFrame 
 
-        # 没看见方框  将不会显示四个点
         else:
-            cv2.imshow("Rectangle Corners", bgr_image)
             return None
 
 
@@ -325,16 +367,21 @@ class Class_Drone_Controller:
                                             self.position_buffer[0],
                                             self.vector_buffer[-1],
                                             self.vector_buffer[0])
-                # 清空缓存
-                self.position_buffer = []
+                
+                # 清空缓存 #FF0000 需要修改逻辑，充分利用数据
+                self.valid_pos_buffer.append(self.position_buffer[-1])  # 有效位置缓存
+                self.valid_vec_buffer.append(self.vector_buffer[-1])    # 有效方向缓存
+
+                self.position_buffer = [] # 清空缓存
                 self.vector_buffer   = []
+
+                # self.position_buffer = [self.position_buffer[-1]] # 只保留最新位置
+                # self.vector_buffer   = [self.vector_buffer[-1]]   # 只保留最新方向
 
                 # 更新目标值
                 self.target_buffer.append(T) # 目标缓存
                 self.Compute_YAW() # 计算目标 YAW
-                
-                return T
-        
+                        
         return None
     ############################################# 计算目标 YAW #############################################
     def Compute_YAW(self):
@@ -372,17 +419,16 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
     #0000FF 当前控制命令
     # 判断是否第一次运行
     if Drone_Controller is None:
-        Drone_Controller = Class_Drone_Controller()  # 创建无人机控制器对象
+        Drone_Controller = Class_Drone_Controller(camera_data)  # 创建无人机控制器对象
         print("Drone_Controller Created")
 
     # 无人机状态更新
     Drone_Controller.update(sensor_data, camera_data) 
     Drone_Controller.Compute_Target_With_Buffer()
 
-    # 说明：这里发送什么命令无人机就会到什么地方
-
-
+    
     #FF0000 目标测试
+    # 说明：这里发送什么命令无人机就会到什么地方
     if Drone_Controller.target_buffer:
         TARGET = Drone_Controller.target_buffer[-1]
         control_command = [TARGET[0] + 0.2, # 这里需要修改，需要视觉计算粉色矩形的法向量

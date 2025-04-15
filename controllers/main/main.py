@@ -678,9 +678,6 @@ if __name__ == '__main__':
     assert control_style in ['keyboard','path_planner'], "Variable control_style must either be 'keyboard' or 'path_planner'"
     assert exp_num in [0,1,2,3,4], "Exp_num must be a value between 0 and 4"
 
-    # 初始化 无人机控制类
-    Drone_Controller = assignment.Class_Drone_Controller()
-
     # Start the path planner thread
     if control_style == 'path_planner' and exp_num == 4:
         planner_thread = threading.Thread(target=path_planner_thread, args=(drone,));    #00FF00 这里就运行了一次，是多线程任务
