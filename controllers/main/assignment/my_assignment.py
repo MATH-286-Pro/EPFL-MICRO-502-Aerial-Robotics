@@ -137,13 +137,16 @@ class Class_Drone_Controller:
         self.cam_center_y = cam_center_y / 2 # 像素中心点 y
         
         # 全局变量 (三角定位)
-        self.position_buffer = [] # 位置缓存
-        self.vector_buffer   = [] # 方向缓存
+        self.pos_buffer      = [] # 位置缓存
+        self.vec_buffer      = [] # 方向缓存
+        self.vec_list_buffer = [] # 方向列表缓存
         self.min_cumulative_baseline = 0.3  # 设定累计基线距离阈值
 
-        self.valid_pos_buffer = [] # 有效位置缓存
-        self.valid_vec_buffer   = [] # 有效方向缓存
-        self.target_buffer         = [] # 有效目标缓存
+        self.valid_pos_buffer  = [] # 有效位置缓存
+        self.valid_vec_buffer  = [] # 有效方向缓存
+        self.target_buffer     = [] # 有效目标缓存
+
+        self.target_pos_list_buffer = [] # 有效目标缓存列表
 
         # 无人机信息
         self.sensor_data     = None  # 无人机传感器数据
@@ -378,7 +381,7 @@ class Class_Drone_Controller:
             T1 = P1 + x[1] * r1
             T = (T0 + T1) / 2
 
-        print("目标全局坐标：",T)
+        # print("目标全局坐标：",T)
 
         return T
 
@@ -389,28 +392,27 @@ class Class_Drone_Controller:
     ############################################# 三角定位，缓存更新 #############################################
     def Compute_Target_With_Buffer(self):
 
-        # 更新位置 + 视觉
         # 如果视野内无目标，不能将 None 添加到缓存中
         if (self.Drone_Pos_Global is not None) and (self.Drone_target_vec is not None):
-            self.position_buffer.append(self.Drone_Pos_Global)
-            self.vector_buffer.append(self.Drone_target_vec)
+            self.pos_buffer.append(self.Drone_Pos_Global)
+            self.vec_buffer.append(self.Drone_target_vec)
 
         # 计算累计位移
-        if len(self.position_buffer) >= 2: # 至少两帧数据
-            cumulative_baseline = np.linalg.norm(self.position_buffer[-1] - self.position_buffer[0])
+        if len(self.pos_buffer) >= 2: # 至少两帧数据
+            cumulative_baseline = np.linalg.norm(self.pos_buffer[-1] - self.pos_buffer[0])
 
             if cumulative_baseline >= self.min_cumulative_baseline:
-                T = self.target_positioning(self.position_buffer[-1], 
-                                            self.position_buffer[0],
-                                            self.vector_buffer[-1],
-                                            self.vector_buffer[0])
+                T = self.target_positioning(self.pos_buffer[-1], 
+                                            self.pos_buffer[0],
+                                            self.vec_buffer[-1],
+                                            self.vec_buffer[0])
                 
                 # 清空缓存 #FF0000 需要修改逻辑，充分利用数据
-                self.valid_pos_buffer.append(self.position_buffer[-1])  # 有效位置缓存
-                self.valid_vec_buffer.append(self.vector_buffer[-1])    # 有效方向缓存
+                self.valid_pos_buffer.append(self.pos_buffer[-1])  # 有效位置缓存
+                self.valid_vec_buffer.append(self.vec_buffer[-1])    # 有效方向缓存
 
-                self.position_buffer = [] # 清空缓存
-                self.vector_buffer   = []
+                self.pos_buffer = [] # 清空缓存
+                self.vec_buffer   = []
 
                 # self.position_buffer = [self.position_buffer[-1]] # 只保留最新位置
                 # self.vector_buffer   = [self.vector_buffer[-1]]   # 只保留最新方向
@@ -420,6 +422,44 @@ class Class_Drone_Controller:
                 self.Compute_YAW() # 计算目标 YAW
                         
         return None
+    
+    def Compute_Target_List_with_Buffer(self):
+
+        # 如果视野内无目标，不能将 None 添加到缓存中
+        if (self.Drone_Pos_Global is not None) and (self.Drone_target_vec_list is not None):
+            self.pos_buffer.append(self.Drone_Pos_Global)
+            self.vec_list_buffer.append(self.Drone_target_vec_list)
+            self.vec_buffer.append(self.Drone_target_vec_list[-1])
+        
+        # 计算累计位移
+        if len(self.pos_buffer) >= 2: # 至少两帧数据
+            cumulative_baseline = np.linalg.norm(self.pos_buffer[-1] - self.pos_buffer[0])
+            
+            if cumulative_baseline >= self.min_cumulative_baseline:
+                
+                # 初始化
+                Target_Pos_list = np.zeros((5,3)) # 5 个目标位置
+
+                # 计算 5 个目标位置
+                for i in range(5):
+                    Target_Pos = self.target_positioning(self.pos_buffer[-1], 
+                                                         self.pos_buffer[0],
+                                                         self.vec_list_buffer[-1][i],
+                                                         self.vec_list_buffer[0][i])
+                    Target_Pos_list[i] = Target_Pos
+
+                # 清空缓存 #FF0000 需要修改逻辑，充分利用数据
+                # self.valid_pos_buffer.append(self.pos_buffer[-1])    # 有效位置缓存
+                # self.valid_vec_buffer.append(self.vec_buffer[-1])    # 有效方向缓存
+
+                self.pos_buffer      = [] # 清空缓存
+                self.vec_list_buffer = []
+
+
+                # 更新目标值
+                self.target_pos_list_buffer.append(Target_Pos_list) # 目标缓存
+                self.Compute_YAW() # 计算目标 YAW
+
     ############################################# 计算目标 YAW #############################################
     def Compute_YAW(self):
         Vector_3D = self.Drone_target_vec
@@ -460,18 +500,29 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
 
     # 无人机状态更新
     Drone_Controller.update(sensor_data, camera_data) 
-    Drone_Controller.Compute_Target_With_Buffer()
+    # Drone_Controller.Compute_Target_With_Buffer()
+    Drone_Controller.Compute_Target_List_with_Buffer() # 测试 list 更新
 
     
-    #FF0000 目标测试
+    # #FF0000 目标测试
+    # # 说明：这里发送什么命令无人机就会到什么地方
+    # if Drone_Controller.target_buffer:
+    #     TARGET = Drone_Controller.target_buffer[-1]
+    #     control_command = [TARGET[0] + 0.2, # 这里需要修改，需要视觉计算粉色矩形的法向量
+    #                        TARGET[1] - 0.2,
+    #                        TARGET[2],
+    #                        Drone_Controller.Drone_target_YAW]  # 目标 YAW
+
+    #FF0000 多目标测试
     # 说明：这里发送什么命令无人机就会到什么地方
-    if Drone_Controller.target_buffer:
-        TARGET = Drone_Controller.target_buffer[-1]
+    if Drone_Controller.target_pos_list_buffer:
+        TARGET = Drone_Controller.target_pos_list_buffer[-1][4]
+        print(TARGET)
+
         control_command = [TARGET[0] + 0.2, # 这里需要修改，需要视觉计算粉色矩形的法向量
                            TARGET[1] - 0.2,
                            TARGET[2],
                            Drone_Controller.Drone_target_YAW]  # 目标 YAW
-
     
     return control_command 
 
