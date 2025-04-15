@@ -678,6 +678,9 @@ if __name__ == '__main__':
     assert control_style in ['keyboard','path_planner'], "Variable control_style must either be 'keyboard' or 'path_planner'"
     assert exp_num in [0,1,2,3,4], "Exp_num must be a value between 0 and 4"
 
+    #00FF00 初始化
+    Drone_Controller = assignment.Class_Drone_Controller()
+
     # Start the path planner thread
     if control_style == 'path_planner' and exp_num == 4:
         planner_thread = threading.Thread(target=path_planner_thread, args=(drone,));    #00FF00 这里就运行了一次，是多线程任务
@@ -738,6 +741,8 @@ if __name__ == '__main__':
                         # Read the camera feed 读取相机数据
                         camera_data = drone.read_camera()
 
+
+
                         # Update the sensor data in the thread
                         with sensor_lock:
                             latest_sensor_data = sensor_data #00FF00 全局变量 传感器
@@ -758,6 +763,11 @@ if __name__ == '__main__':
                 # Update the PID control time
                 drone.dt_ctrl = drone.getTime() - drone.PID_update_last_time # Time interval for PID control - Is refactored above for KF - why done twice?
                 drone.PID_update_last_time = drone.getTime()
+
+            # # 测试 #00FF00
+            # if Drone_Controller.target_pos_list_buffer:
+            #     assignment.plot_3D_rect(Drone_Controller.target_pos_list_buffer[-1])
+            #     print(Drone_Controller.target_pos_list_buffer[-1])
 
             # Update the drone status in simulation
             drone.step(motorPower, sensor_data)

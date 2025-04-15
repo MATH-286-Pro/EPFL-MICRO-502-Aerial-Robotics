@@ -2,6 +2,7 @@ import numpy as np
 import time
 import cv2
 
+
 # The available ground truth state measurements can be accessed by calling sensor_data[item]. All values of "item" are provided as defined in main.py within the function read_sensors. 
 # The "item" values that you may later retrieve for the hardware project are:
 
@@ -112,13 +113,6 @@ def compute_target_center(rect, eps=1e-6):
 
     return center
 
-# 计算目标法向量
-def compute_normal_vector(v1,v2):
-    # 说明：从 v1 到 v2 右手定律，大拇指为计算法向量
-    normal = np.cross(v1, v2)     # 计算法向量
-    normal = Unit_Vector(normal)  # 单位化
-    return normal
-
 ########################################## 自定基础函数 ##########################################
 
 
@@ -127,39 +121,42 @@ def compute_normal_vector(v1,v2):
 # 定义无人机类
 class Class_Drone_Controller:
 
-    def __init__(self, camera_data):
+    def __init__(self):
 
         # 基本参数
         self.f_pixel = 161.013922282   # 相机焦距
         self.vector_Drone2Cam_DroneFrame = np.array([0.03,0.00,0.01]) # 无人机中心到相机偏移向量
+        self.camera_size = [300,300]
 
-        cam_center_y, cam_center_x, _ = camera_data.shape
-        self.cam_center_x = cam_center_x / 2 # 像素中心点 x
-        self.cam_center_y = cam_center_y / 2 # 像素中心点 y
-        
-        # 全局变量 (三角定位)
-        self.pos_buffer      = [] # 位置缓存
-        self.vec_buffer      = [] # 方向缓存
-        self.vec_list_buffer = [] # 方向列表缓存
-        self.min_cumulative_baseline = 0.3  # 设定累计基线距离阈值
+        self.cam_center_x = self.camera_size[X] / 2 # 像素中心点 x
+        self.cam_center_y = self.camera_size[Y] / 2 # 像素中心点 y
 
-        self.valid_pos_buffer  = [] # 有效位置缓存
-        self.valid_vec_buffer  = [] # 有效方向缓存
-        self.target_buffer     = [] # 有效目标缓存
-
-        self.target_pos_list_buffer = [] # 有效目标缓存列表
 
         # 无人机信息
         self.sensor_data     = None  # 无人机传感器数据
         self.camera_data     = None  # 相机数据
         self.camera_data_BGR = None  # 相机数据 BGR
 
-        # 计算数据
-        self.Drone_Pos_Global    = None  
-        self.Drone_target_vec    = None  # 目标方向
-        self.Drone_target_vec_list = []  # 目标方向列表，0-3为矩形的四个点，4为中心点
-        self.Drone_target_normal = None  # 目标矩形法向量
-        self.Drone_target_YAW    = None
+        # 实时数据 (大写代表实时数据)
+        self.Drone_POS_GLOBAL      = None  
+        self.Camera_POS_GLOBAL     = None
+        self.Drone_TARGET_VEC      = None  # 目标方向
+        self.Drone_TARGET_VEC_list = []  # 目标方向列表，0-3为矩形的四个点，4为中心点
+
+        self.Drone_YAW_TARGET    = None
+        self.Drone_YAW_NORMAL    = None  
+
+        # 缓存数据 (三角定位)
+        self.Drone_Pos_Buffer             = [] # 位置缓存
+        self.Drone_Target_Vec_Buffer      = [] # 方向缓存
+        self.Drone_Target_Vec_List_Buffer = [] # 方向列表缓存
+        self.min_cumulative_baseline = 0.3  # 设定累计基线距离阈值
+
+        self.valid_pos_buffer  = [] # 有效位置缓存
+        self.valid_vec_buffer  = [] # 有效方向缓存
+        self.target_pos_buffer = [] # 有效目标缓存
+
+        self.target_pos_list_buffer = [] # 有效目标缓存列表
 
         # 启动标志
         self.START_FLAG       = False  
@@ -180,47 +177,43 @@ class Class_Drone_Controller:
         self.camera_data_BGR = bgr_image
 
         # 更新位置 + 相机目标
-        self.Drone_Pos_Global = self.get_position_global()         # 无人机全局坐标系下位置
-        self.Drone_target_vec = self.img_to_vector(DEBUG=True)     # 相机坐标系下目标位置
-        self.Drone_target_vec_list = self.img_to_vector_list()     # 相机坐标系下目标位置列表
+        self.update_drone_quat()               # 更新无人机四元数
+        self.update_drone_position_global()    # 更新无人机坐标
+        self.update_camera_position_global()   # 更新相机坐标
+        self.update_img2vector_list(DEBUG = True)     # 相机坐标系下目标位置列表
 
     ########################################## 传感器函数 ##########################################
-    def get_quat_from_sensor(self):
+    def update_drone_quat(self):
         quat = np.array([self.sensor_data['q_x'], 
                          self.sensor_data['q_y'], 
                          self.sensor_data['q_z'], 
                          self.sensor_data['q_w']])
-        return quat
+        self.Q = quat.copy()  # 复制四元数
 
-    def get_position_global(self):
+    def update_drone_position_global(self):
         position = np.array([self.sensor_data['x_global'], 
                              self.sensor_data['y_global'], 
                              self.sensor_data['z_global']])
-        return position
+        self.Drone_POS_GLOBAL = position
 
-    def get_position_cam_global(self):
-        P_Drone_global = self.get_position_global()      # 无人机全局坐标系下位置
-        Q_Drone2World  = self.get_quat_from_sensor()     # 无人机四元数
+    def update_camera_position_global(self):
+        P_Drone_global = self.Drone_POS_GLOBAL      # 无人机全局坐标系下位置
+        Q_Drone2World  = self.Q                     # 无人机四元数
         P_Drone2Cam_Shift_global = vector_rotate(self.vector_Drone2Cam_DroneFrame, Q_Drone2World)  # 无人机坐标系下相机位置
-        P_Cam_global   = P_Drone_global + P_Drone2Cam_Shift_global       # 相机全局坐标系下位置
-        return P_Cam_global
+        P_Cam_global   = P_Drone_global + P_Drone2Cam_Shift_global     
+        self.Camera_POS_GLOBAL =  P_Cam_global   # 相机全局坐标系下位置
     
     ########################################## 坐标变换函数 ##########################################
     def Convert_Frame_Drone2World(self, P_DroneFrame):
-
-        Q_Drone2World = self.get_quat_from_sensor()  # 无人机四元数
+        Q_Drone2World = self.Q  
         P_WorldFrame  = vector_rotate(P_DroneFrame, Q_Drone2World)    # Body Frame -> World Frame
-
         return P_WorldFrame
 
     def Convert_Frame_Cam2Drone(self, P_CamFrame):
         cam_delta_x = P_CamFrame[0] - self.cam_center_x
         cam_delta_y = P_CamFrame[1] - self.cam_center_y
-
         vector_DroneFrame = np.array([self.f_pixel, -cam_delta_x, -cam_delta_y])
-
         return vector_DroneFrame
-
 
     ########################################## 图像处理函数 ##########################################
 
@@ -276,47 +269,27 @@ class Class_Drone_Controller:
 
             # 在原图上画出四个点
             if DEBUG:
+                length = len(target_rect)
+                increment = int(255/(length+1))  # 计算增量
+                green_value = increment
                 for x, y in target_rect:
                     cv2.circle(Feature_Frame, (int(x), int(y)), 5, (0, 255, 0), -1)
                 cv2.imshow("Rectangle Corners", Feature_Frame)
-            
+
+            self.IMAGE_POINTS = target_rect.copy() # 复制点 #00FF00 #00FF00
+
             return target_rect # 返回拟合的 四边形顶点 + 中心点
         
         else:
             if DEBUG:
                 cv2.imshow("Rectangle Corners", Feature_Frame)
+
+            self.IMAGE_POINTS = None # 没有找到目标
             return None
 
-
-    # 图像 -> 方向向量    
-    def img_to_vector(self, DEBUG = False):
-
-        # 定义索引
-        index_center = 4
-
-        # 图像处理
-        cv2.waitKey(1) # 如果放在 return 后面会报错
-        binary_mask = self.img_BGR_to_PINK()                 # 抠图
-        target_rect = self.img_to_points(binary_mask, DEBUG) # 计算特征点
-        
-        # 计算向量
-        if target_rect is not None:
-            
-            # 目标方向：相机坐标系 -> 无人机坐标系
-            Vector_Cam2Target_DroneFrame = self.Convert_Frame_Cam2Drone(target_rect[index_center]) # 计算相机坐标系下的目标方向
-            Vector_Cam2Target_DroneFrame = Unit_Vector(Vector_Cam2Target_DroneFrame)  # 单位化
-
-            # 目标方向：无人机坐标系 -> 世界坐标系
-            Vector_Cam2Target_WorldFrame = self.Convert_Frame_Drone2World(Vector_Cam2Target_DroneFrame)
-            Vector_Cam2Target_WorldFrame = Unit_Vector(Vector_Cam2Target_WorldFrame)  # 单位化
-
-            return Vector_Cam2Target_WorldFrame 
-
-        else:
-            return None
 
     # 图像 -> 方向向量列表
-    def img_to_vector_list(self, DEBUG = False):
+    def update_img2vector_list(self, DEBUG = False):
 
         # 初始化
         Vector_Cam2Target_WorldFrame_list = []
@@ -331,19 +304,19 @@ class Class_Drone_Controller:
             
             for cam_point in cam_points:
                 # 目标方向：相机坐标系 -> 无人机坐标系
-                Vector_Cam2Target_DroneFrame = self.Convert_Frame_Cam2Drone(cam_point) # 计算相机坐标系下的目标方向
-                Vector_Cam2Target_DroneFrame = Unit_Vector(Vector_Cam2Target_DroneFrame)  # 单位化
+                Vector_Cam2Target_DroneFrame = self.Convert_Frame_Cam2Drone(cam_point)    
+                Vector_Cam2Target_DroneFrame = Unit_Vector(Vector_Cam2Target_DroneFrame)  
 
                 # 目标方向：无人机坐标系 -> 世界坐标系
                 Vector_Cam2Target_WorldFrame = self.Convert_Frame_Drone2World(Vector_Cam2Target_DroneFrame)
-                Vector_Cam2Target_WorldFrame = Unit_Vector(Vector_Cam2Target_WorldFrame)  # 单位化
+                Vector_Cam2Target_WorldFrame = Unit_Vector(Vector_Cam2Target_WorldFrame)  
 
                 Vector_Cam2Target_WorldFrame_list.append(Vector_Cam2Target_WorldFrame)    # 添加到列表中
 
-            return Vector_Cam2Target_WorldFrame_list 
+            self.Drone_TARGET_VEC_list = Vector_Cam2Target_WorldFrame_list 
 
-        else:
-            return None
+        else :
+            self.Drone_TARGET_VEC_list = None
 
 
     ########################################## 三角定位部分 ######################################################
@@ -384,55 +357,21 @@ class Class_Drone_Controller:
 
         return T
 
-        # 点1 = [2.12, 1.84, 1.24]
-        # 点2 = [5.12, 2.30, 0.78]
 
-
-    ############################################# 三角定位，缓存更新 #############################################
-    def Compute_Target_With_Buffer(self):
-
-        # 如果视野内无目标，不能将 None 添加到缓存中
-        if (self.Drone_Pos_Global is not None) and (self.Drone_target_vec is not None):
-            self.pos_buffer.append(self.Drone_Pos_Global)
-            self.vec_buffer.append(self.Drone_target_vec)
-
-        # 计算累计位移
-        if len(self.pos_buffer) >= 2: # 至少两帧数据
-            cumulative_baseline = np.linalg.norm(self.pos_buffer[-1] - self.pos_buffer[0])
-
-            if cumulative_baseline >= self.min_cumulative_baseline:
-                T = self.target_positioning(self.pos_buffer[-1], 
-                                            self.pos_buffer[0],
-                                            self.vec_buffer[-1],
-                                            self.vec_buffer[0])
-                
-                # 清空缓存 #FF0000 需要修改逻辑，充分利用数据
-                self.valid_pos_buffer.append(self.pos_buffer[-1])  # 有效位置缓存
-                self.valid_vec_buffer.append(self.vec_buffer[-1])    # 有效方向缓存
-
-                self.pos_buffer = [] # 清空缓存
-                self.vec_buffer   = []
-
-                # self.position_buffer = [self.position_buffer[-1]] # 只保留最新位置
-                # self.vector_buffer   = [self.vector_buffer[-1]]   # 只保留最新方向
-
-                # 更新目标值
-                self.target_buffer.append(T) # 目标缓存
-                self.Compute_YAW() # 计算目标 YAW
-                        
-        return None
-    
+    ############################################# 三角定位，缓存更新 ############################################# 
     def Compute_Target_List_with_Buffer(self):
 
         # 如果视野内无目标，不能将 None 添加到缓存中
-        if (self.Drone_Pos_Global is not None) and (self.Drone_target_vec_list is not None):
-            self.pos_buffer.append(self.Drone_Pos_Global)
-            self.vec_list_buffer.append(self.Drone_target_vec_list)
-            self.vec_buffer.append(self.Drone_target_vec_list[-1])
+        # #0000FF 大写代表实时更新数据，实时数据会包含 None #0000FF
+        if (self.Drone_POS_GLOBAL is not None) and (self.Drone_TARGET_VEC_list is not None):
+
+            # 更新 Buffer
+            self.Drone_Pos_Buffer.append(self.Drone_POS_GLOBAL)
+            self.Drone_Target_Vec_List_Buffer.append(self.Drone_TARGET_VEC_list)
         
         # 计算累计位移
-        if len(self.pos_buffer) >= 2: # 至少两帧数据
-            cumulative_baseline = np.linalg.norm(self.pos_buffer[-1] - self.pos_buffer[0])
+        if len(self.Drone_Pos_Buffer) >= 2: # 至少两帧数据
+            cumulative_baseline = np.linalg.norm(self.Drone_Pos_Buffer[-1] - self.Drone_Pos_Buffer[0])
             
             if cumulative_baseline >= self.min_cumulative_baseline:
                 
@@ -441,28 +380,93 @@ class Class_Drone_Controller:
 
                 # 计算 5 个目标位置
                 for i in range(5):
-                    Target_Pos = self.target_positioning(self.pos_buffer[-1], 
-                                                         self.pos_buffer[0],
-                                                         self.vec_list_buffer[-1][i],
-                                                         self.vec_list_buffer[0][i])
-                    Target_Pos_list[i] = Target_Pos
+                    Target_Pos_list[i] = self.target_positioning(self.Drone_Pos_Buffer[-1], 
+                                                                 self.Drone_Pos_Buffer[0],
+                                                                 self.Drone_Target_Vec_List_Buffer[-1][i],
+                                                                 self.Drone_Target_Vec_List_Buffer[0][i])
 
-                # 清空缓存 #FF0000 需要修改逻辑，充分利用数据
-                # self.valid_pos_buffer.append(self.pos_buffer[-1])    # 有效位置缓存
-                # self.valid_vec_buffer.append(self.vec_buffer[-1])    # 有效方向缓存
+                print("目标全局坐标：",Target_Pos_list[-1], self.Drone_Target_Vec_List_Buffer[-1][4])
 
-                self.pos_buffer      = [] # 清空缓存
-                self.vec_list_buffer = []
+                # 缓存清空 #FF0000 需要修改逻辑，充分利用数据
+                # self.Drone_Pos_Buffer             = [] # 清空缓存
+                # self.Drone_Target_Vec_List_Buffer = []
 
+                # 缓存保留部分数据
+                length = len(self.Drone_Pos_Buffer)
+                self.Drone_Pos_Buffer = [self.Drone_Pos_Buffer[length - 2]]                         # 保留帧数据
+                self.Drone_Target_Vec_List_Buffer = [self.Drone_Target_Vec_List_Buffer[length - 2]] # 保留帧数据
 
                 # 更新目标值
                 self.target_pos_list_buffer.append(Target_Pos_list) # 目标缓存
-                self.Compute_YAW() # 计算目标 YAW
+
+                #FF0000 测试不同 YAW 值
+                self.Compute_YAW_TARGET() # 计算目标 YAW
+                self.Compute_YAW_NORMAL() 
+
+
 
     ############################################# 计算目标 YAW #############################################
-    def Compute_YAW(self):
-        Vector_3D = self.Drone_target_vec
-        self.Drone_target_YAW = np.arctan2(Vector_3D[1], Vector_3D[0])  # 计算 YAW 角度
+    def Compute_YAW_TARGET(self):
+        Vector_3D = self.Drone_TARGET_VEC_list[4]
+        self.Drone_YAW_TARGET = np.arctan2(Vector_3D[1], Vector_3D[0])  # 计算 YAW 角度
+    
+    def Compute_YAW_NORMAL(self):
+
+        # points_global = self.target_pos_list_buffer[-1]
+        points_global = np.mean(self.target_pos_list_buffer, axis=0) # 计算平均值
+
+        vec1 = points_global[0] - points_global[3]
+        vec2 = points_global[1] - points_global[2]
+        vec = 0.5*(vec1 + vec2) 
+        theta = np.arctan2(vec[1], vec[0])  # 计算 YAW 角度
+
+        normal_angle = theta - np.pi / 2
+        normal_vector = np.array([np.cos(normal_angle), np.sin(normal_angle), 0]) #FF0000 注意这个是不精确的法向量
+
+        self.Drone_YAW_NORMAL = normal_angle 
+        self.Drone_YAW_NORMAL_VEC = normal_vector
+
+    ############################################## 轨迹生成函数 ##############################################
+
+    def Generate_Trajectory(self, T = 3, dt = 0.1):
+        p0 = self.Camera_POS_GLOBAL
+        pT  = self.target_pos_list_buffer[-1][4] + self.Drone_YAW_NORMAL_VEC * 0.8
+
+        v0 = np.array([self.sensor_data['v_x'],
+                                self.sensor_data['v_y'],
+                                self.sensor_data['v_z']])
+        vT  = self.Drone_YAW_NORMAL_VEC
+
+        # 根据起始条件构建三次多项式的系数
+        a0 = p0
+        a1 = v0
+        Delta = pT - p0 - v0 * T
+        a2 = (3 * Delta) / (T ** 2) - (2 * v0 + vT) / T
+        a3 = (-2 * Delta) / (T ** 3) + (v0 + vT) / (T ** 2)
+
+        # 生成轨迹数据点
+        t_vals = np.arange(0, T + dt, dt)
+        trajectory = np.array([a0 + a1 * t + a2 * t**2 + a3 * t**3 for t in t_vals])
+
+        return trajectory
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -494,34 +498,37 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
     #0000FF 当前控制命令
     # 判断是否第一次运行
     if Drone_Controller is None:
-        Drone_Controller = Class_Drone_Controller(camera_data)  # 创建无人机控制器对象
+        Drone_Controller = Class_Drone_Controller()  # 创建无人机控制器对象
         print("Drone_Controller Created")
 
     # 无人机状态更新
     Drone_Controller.update(sensor_data, camera_data) 
-    # Drone_Controller.Compute_Target_With_Buffer()
     Drone_Controller.Compute_Target_List_with_Buffer() # 测试 list 更新
 
-    
-    # #FF0000 目标测试
-    # # 说明：这里发送什么命令无人机就会到什么地方
-    # if Drone_Controller.target_buffer:
-    #     TARGET = Drone_Controller.target_buffer[-1]
-    #     control_command = [TARGET[0] + 0.2, # 这里需要修改，需要视觉计算粉色矩形的法向量
-    #                        TARGET[1] - 0.2,
-    #                        TARGET[2],
-    #                        Drone_Controller.Drone_target_YAW]  # 目标 YAW
-
-    #FF0000 多目标测试
+    #FF0000 
     # 说明：这里发送什么命令无人机就会到什么地方
-    if Drone_Controller.target_pos_list_buffer:
-        TARGET = Drone_Controller.target_pos_list_buffer[-1][4]
-        print(TARGET)
 
-        control_command = [TARGET[0] + 0.2, # 这里需要修改，需要视觉计算粉色矩形的法向量
-                           TARGET[1] - 0.2,
+    # 如果看到粉色 + 目标不为空
+    if Drone_Controller.target_pos_list_buffer and Drone_Controller.IMAGE_POINTS is not None:
+        TARGET = Drone_Controller.target_pos_list_buffer[-1][4]
+        # print(TARGET)
+
+        control_command = [TARGET[0], # 这里需要修改，需要视觉计算粉色矩形的法向量
+                           TARGET[1],
                            TARGET[2],
-                           Drone_Controller.Drone_target_YAW]  # 目标 YAW
+                           Drone_Controller.Drone_YAW_TARGET]  # 目标 YAW
+        
+        # control_command = [TARGET[0] , # 这里需要修改，需要视觉计算粉色矩形的法向量
+        #                    TARGET[1] ,
+        #                    TARGET[2],
+        #                    sensor_data['yaw'] + 0.15]  # 目标 YAW
+    
+    # 如果没看到粉色
+    elif Drone_Controller.IMAGE_POINTS is None:
+        control_command = [sensor_data['x_global'], 
+                          sensor_data['y_global'], 
+                          sensor_data['z_global'],   # 1.0
+                          sensor_data['yaw'] + 0.15]
     
     return control_command 
 
