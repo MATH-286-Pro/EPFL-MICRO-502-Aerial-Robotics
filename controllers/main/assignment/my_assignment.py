@@ -280,7 +280,7 @@ class Class_Drone_Controller:
         self.Camera_POS_GLOBAL =  P_Cam_global   # 相机全局坐标系下位置
     
     ########################################## 状态检测函数 ##########################################
-    def check_target_arrived(self):
+    def check_target_near(self):
         
         try:
             target_pos = self.target_pos_list_buffer[-1][4]  # 目标位置
@@ -448,23 +448,22 @@ class Class_Drone_Controller:
         """
         检测输入的二维点集合（如 (N,2) 的 numpy 数组）中是否至少有两个点的 X 或 Y 坐标等于 0 或 300。
         """
-        try:
-            if self.IMAGE_POINTS_2D is not None:
-                pts = self.IMAGE_POINTS_2D[0:4] # 取出四个点
-            else:
-                return False
 
-            count = 0
-            for pt in pts:
-                x, y = pt
-                if x == 0 or x == 300 or y == 0 or y == 300:
-                    count += 1
-                if count >= 2 and DEBUG:
+        if self.IMAGE_POINTS_2D is not None:
+            pts = self.IMAGE_POINTS_2D[0:4] # 取出四个点
+        else:
+            return False
+
+        count = 0
+        for pt in pts:
+            x, y = pt
+            if x == 0 or x == 300 or y == 0 or y == 300:
+                count += 1
+            if count >= 2:
+                if DEBUG:
                     print("检测到方形超出边框")
-                    return True
-            return False
-        except IndexError:
-            return False
+                return True
+        return False
 
     ########################################## 三角定位部分 ######################################################
     def triangular_positioning(self,
@@ -713,13 +712,13 @@ class Class_Drone_Controller:
 
     ############################################### 扫描函数 ##############################################
     def Generate_Scan_Sequence(self):
-        T  = 6
+        T  = 10
         dt = 0.01
 
         t_sequence = np.arange(0, T + dt, dt) # 生成时间序列
 
         YAW_shift    = 20 * deg2arc     # 扫描 震荡角度
-        delta_YAW    = 180 * deg2arc    # 扫描 震荡角度
+        delta_YAW    = 270 * deg2arc    # 扫描 震荡角度
         delta_height = 0.0              # 扫描 震荡高度
 
         omega = 2*np.pi/T
@@ -810,5 +809,8 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
         save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")          # 保存数据
         save_data(Drone_Controller.target_pos_list_Valid,  file_name="target_positions_filtered") # 保存数据
         Draw = True
+
+    if (Drone_Controller.check_is_near_gate()):
+        print(True)
 
     return control_command 
