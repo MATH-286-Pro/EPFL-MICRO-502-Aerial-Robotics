@@ -136,6 +136,28 @@ def compute_target_center(rect, eps=1e-6):
 
     return center
 
+# 四边形重新排序函数
+def SORT(pts):
+    """
+    输入：
+        pts: numpy 数组，形状 (4,2)，每行是一个 (x,y) 坐标
+    返回：
+        按 [左上, 左下, 右下, 右上] 排序后的点，形状 (4,2)
+    """
+    # 1. 按 x 坐标升序，分成左右两组
+    pts_sorted = pts[np.argsort(pts[:, 0])]
+    left  = pts_sorted[:2]   # x 最小的两个
+    right = pts_sorted[2:]   # x 最大的两个
+
+    # 2. 左组按 y 升序：上<下；右组同理
+    left  = left[np.argsort(left[:, 1])]
+    right = right[np.argsort(right[:, 1])]
+
+    tl, bl = left    # top-left, bottom-left
+    tr, br = right   # top-right, bottom-right
+
+    return np.array([tl, bl, br, tr], dtype=pts.dtype)
+
 # 保存数据
 def save_data(target_pos_list_buffer, file_name = "target_positions"):
     # 创建一个列表，用于存储所有目标点的字典数据
@@ -222,7 +244,6 @@ class Class_Drone_Controller:
 
         # 启动函数
         self.update(sensor_data, camera_data) # 更新数据
-        self.IMG_direction_Initialize()       # 初始化方向
         self.Record_Start_Point()             # 记录起始位置
         self.Generate_Scan_Sequence()         # 生成扫描偏移序列
 
@@ -325,6 +346,27 @@ class Class_Drone_Controller:
             if P_Diff >= self.points_filter_threshold:
                 self.RACING_EXPLORE += 1
 
+
+    def check_is_near_gate(self, DEBUG = False):
+        """
+        检测输入的二维点集合（如 (N,2) 的 numpy 数组）中是否至少有两个点的 X 或 Y 坐标等于 0 或 300。
+        """
+        if self.IMAGE_POINTS_2D is not None:
+            pts = self.IMAGE_POINTS_2D[0:4] # 取出四个点
+
+            count = 0
+            for pt in pts:
+                x, y = pt
+                if x < 2 or x > 298 or y < 2 or y > 298:
+                    count += 1
+            if count >= 2:
+                if DEBUG:
+                    print("检测到方形超出边框")
+                return True
+            else:
+                return False
+        else:
+            return False
     ########################################## 坐标变换函数 ##########################################
     def Convert_Frame_Drone2World(self, P_DroneFrame):
         Q_Drone2World = self.Q  
@@ -390,6 +432,7 @@ class Class_Drone_Controller:
         if largest_rect is not None:
             largest_rect     = np.squeeze(largest_rect, axis=1)                     # 将 4x1x2 的数组转换为 4x2 的数组
             rect_center      = compute_target_center(largest_rect)                  # np.Float64
+            largest_rect     = SORT(largest_rect)                                    #FF0000 添加测试
             target_rect      = np.append(largest_rect, [rect_center], axis = 0)     # 添加中心点
 
             # 更新图像点
@@ -442,28 +485,6 @@ class Class_Drone_Controller:
         else :
             self.IMAGE_TARGET_VEC_list = None
 
-
-    ########## 图像判断函数 ##########
-    def check_is_near_gate(self, DEBUG = False):
-        """
-        检测输入的二维点集合（如 (N,2) 的 numpy 数组）中是否至少有两个点的 X 或 Y 坐标等于 0 或 300。
-        """
-
-        if self.IMAGE_POINTS_2D is not None:
-            pts = self.IMAGE_POINTS_2D[0:4] # 取出四个点
-        else:
-            return False
-
-        count = 0
-        for pt in pts:
-            x, y = pt
-            if x == 0 or x == 300 or y == 0 or y == 300:
-                count += 1
-            if count >= 2:
-                if DEBUG:
-                    print("检测到方形超出边框")
-                return True
-        return False
 
     ########################################## 三角定位部分 ######################################################
     def triangular_positioning(self,
@@ -631,23 +652,6 @@ class Class_Drone_Controller:
 
     ############################################ 基于图像控制器 ##############################################
 
-    # 防止开始 Lock 导致的方向错误
-    def IMG_direction_Initialize(self):
-        self.IMG_LAST_DIRECTION = self.IMAGE_TARGET_VEC_list[4] # 目标方向
-
-    def IMG_direction(self):
-
-        direction = self.IMAGE_TARGET_VEC_list[4] # 目标方向
-
-        # return direction
-    
-        if self.LOCK:
-            return self.IMG_LAST_DIRECTION
-        
-        if not self.LOCK:
-            self.IMG_LAST_DIRECTION = direction.copy() # 记录上一个方向
-            return direction
-
     # 常数偏移
     def constant_drift_in_Y(self):
 
@@ -681,7 +685,7 @@ class Class_Drone_Controller:
         f[mask2] = 0.5 * (x[mask2] / T)**n
         return f
 
-
+    # 系数衰减
     def coefficient_drift_in_Y(self):
 
         # 阈值
@@ -693,16 +697,62 @@ class Class_Drone_Controller:
         else:
             return self.f_poly(self.compute_distance_drone_to_target(), Dist_Threshold, n=4) # 多项式衰减函数
 
+    # 计算方框偏转角度 -> 偏移速度
+    def drift_speed_in_Y(self):
+
+        drift_velocuty = np.array([0, 0, 0]) 
+
+        if self.IMAGE_POINTS_2D is None:
+            return np.array([0, 0, 0])
+
+        p0 = self.IMAGE_POINTS_2D[0] # 左上角
+        p1 = self.IMAGE_POINTS_2D[1]
+        p2 = self.IMAGE_POINTS_2D[2]
+        p3 = self.IMAGE_POINTS_2D[3]
+
+        # 左右边
+        length_L = np.linalg.norm(p0 - p1) 
+        length_R = np.linalg.norm(p2 - p3) 
+
+        # 上下边
+        length_T = np.linalg.norm(p0 - p3)
+        length_B = np.linalg.norm(p1 - p2)
+        length_horizontal = 0.5*(length_T + length_B) # 上下边平均值
+        
+        # 数据不合法
+        if length_horizontal / length_L > 1 or length_horizontal / length_R > 1:
+            return np.array([0, 0, 0])
+
+        # 计算角度
+        angle_L = np.arccos(length_horizontal / length_L) # 左边角度
+        angle_R = np.arccos(length_horizontal / length_R) # 右边角度
+
+        # 
+        GAIN = 7
+
+        # 计算偏移速度
+        if length_L > length_R:
+            drift_velocuty = np.array([0, -1, 0]) * GAIN*(angle_L / np.pi) # 左边偏移速度
+            drift_velocuty = self.Convert_Frame_Drone2World(drift_velocuty) # 无人机坐标系 -> 世界坐标系
+        else:
+            drift_velocuty = np.array([0, +1, 0]) * GAIN*(angle_R / np.pi)
+            drift_velocuty = self.Convert_Frame_Drone2World(drift_velocuty) # 无人机坐标系 -> 世界坐标系
+
+        print(angle_L / np.pi, angle_R / np.pi)
+
+        return drift_velocuty 
+        
 
     # 视觉指令 - 总函数
     def IMG_command(self):
 
         # 使用该命令需要确保 看到目标 
-        direction_target = self.IMG_direction()
+        direction_target = self.IMAGE_TARGET_VEC_list[4]
 
         POS = self.update_drone_position_global()
         # POS = POS + direction_target * 1.0 + self.constant_drift_in_Y() * 0.5 # 目标位置 + 偏移量 #FF0000  
-        POS = POS + direction_target * 1.0 + self.constant_drift_in_Y() * self.coefficient_drift_in_Y() # 目标位置 + 偏移量 #FF0000  
+        # POS = POS + direction_target * 1.0 + self.constant_drift_in_Y() * self.coefficient_drift_in_Y() # 目标位置 + 偏移量 #FF0000  
+        POS = POS + direction_target * 1.0 + self.drift_speed_in_Y() * self.coefficient_drift_in_Y() # 目标位置 + 偏移量 #FF0000  
         YAW = self.YAW_TARGET
 
         command = [POS[X], POS[Y], POS[Z], YAW] # 目标位置 + YAW
