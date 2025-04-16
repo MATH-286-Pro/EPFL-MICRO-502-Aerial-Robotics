@@ -3,7 +3,7 @@ import sys
 print("You are using python at this location:", sys.executable)
 
 import numpy as np
-from controller import Supervisor, Keyboard  # type: ignore
+from controller import Supervisor, Keyboard  
 from exercises.ex1_pid_control import quadrotor_controller
 from exercises.ex2_kalman_filter import kalman_filter as KF
 from exercises.ex3_motion_planner import MotionPlanner3D as MP

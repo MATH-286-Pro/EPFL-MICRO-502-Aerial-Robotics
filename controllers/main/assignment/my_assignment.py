@@ -241,7 +241,7 @@ class Class_Drone_Controller:
 
             dist = np.linalg.norm(target_pos - drone_pos)    # 计算距离
 
-            print("dist", dist, "Target", target_pos)
+            # print("dist", dist, "Target", target_pos)
 
             if dist <= 0.5 and self.EXAMING: 
                 self.EXAMING = False
@@ -280,6 +280,35 @@ class Class_Drone_Controller:
         return vector_DroneFrame
 
     ########################################## 图像处理函数 ##########################################
+    def order_points_clockwise(self, pts):
+        """
+        将四个点排序为顺时针顺序：左上、右上、右下、左下
+        """
+        rect = np.zeros((4, 2), dtype="float32")
+        
+        # 计算每个点的 x+y 之和，最小者为左上，最大者为右下
+        s = pts.sum(axis=1)
+        rect[0] = pts[np.argmin(s)]  # 左上角
+        rect[2] = pts[np.argmax(s)]  # 右下角
+
+        # 计算每个点的 x-y 差值，最小者为右上角，最大者为左下角
+        diff = np.diff(pts, axis=1)
+        rect[1] = pts[np.argmin(diff)]  # 右上角
+        rect[3] = pts[np.argmax(diff)]  # 左下角
+        return rect
+
+    def reorder_points_ccw(self, pts):
+        """
+        转换为逆时针顺序为：[左上, 左下, 右下, 右上]
+        """
+        pts_clockwise = self.order_points_clockwise(pts)
+        # 重排序：把 0号点（左上）保持不变，
+        # 1号点改为原4号（左下），2号点为原3号（右下），3号点为原2号（右上）
+        pts_ccw = np.array([pts_clockwise[0],
+                            pts_clockwise[3],
+                            pts_clockwise[2],
+                            pts_clockwise[1]], dtype="float32")
+        return pts_ccw
 
     # 图像 -> 粉色 mask
     def img_BGR_to_PINK(self, DEBUG = False):
@@ -328,6 +357,7 @@ class Class_Drone_Controller:
         # 特征点提取
         if largest_rect is not None:
             largest_rect = np.squeeze(largest_rect, axis=1)                     # 将 4x1x2 的数组转换为 4x2 的数组
+            largest_rect = self.reorder_points_ccw(largest_rect)                # 逆时针排序
             rect_center  = compute_target_center(largest_rect)                  # np.Float64
             target_rect  = np.append(largest_rect, [rect_center], axis = 0)     # 添加中心点
 
@@ -337,7 +367,8 @@ class Class_Drone_Controller:
                 increment = int(255/(length+1))  # 计算增量
                 green_value = increment
                 for x, y in target_rect:
-                    cv2.circle(Feature_Frame, (int(x), int(y)), 5, (0, 255, 0), -1)
+                    cv2.circle(Feature_Frame, (int(x), int(y)), 5, (0, green_value, 0), -1)
+                    green_value += increment
                 cv2.imshow("Rectangle Corners", Feature_Frame)
 
             self.IMAGE_POINTS = target_rect.copy() # 复制点 #00FF00 #00FF00
@@ -555,13 +586,32 @@ class Class_Drone_Controller:
             self.IMG_LAST_DIRECTION = direction.copy() # 记录上一个方向
             return direction
 
+    # 方向矫正测试
+    def IMG_direction_justification(self):
+        Length_L = np.linalg.norm(self.target_pos_list_buffer[-1][0] - self.target_pos_list_buffer[-1][1]) 
+        Length_R = np.linalg.norm(self.target_pos_list_buffer[-1][2] - self.target_pos_list_buffer[-1][3])
+
+        if Length_L > Length_R:
+            direction_DroneFrame = np.array([0 ,-1 ,0]) * (Length_L / Length_R - 1)
+        
+        if Length_L < Length_R:
+            direction_DroneFrame = np.array([0 ,+1 ,0]) * (Length_R / Length_L - 1)
+
+        direction_WorldFrame = self.Convert_Frame_Drone2World(direction_DroneFrame) # 转换到世界坐标系
+        
+        print(Length_L / Length_R, Length_R / Length_L)
+
+        return direction_WorldFrame
+
     def IMG_command(self):
 
         # 使用该命令需要确保 看到目标 
 
-        delta_POS = self.IMG_direction()
+        direction_target = self.IMG_direction()
+        direction_justfy = self.IMG_direction_justification() 
+
         POS = self.update_drone_position_global()
-        POS = POS + delta_POS * 1.0
+        POS = POS + direction_target * 1.0  + direction_justfy * 0.5
         YAW = self.Drone_YAW_TARGET
 
         command = [POS[X], POS[Y], POS[Z], YAW] # 目标位置 + YAW
@@ -571,14 +621,14 @@ class Class_Drone_Controller:
 
     ############################################### 扫描函数 ##############################################
     def Generate_Scan_Sequence(self):
-        T  = 4
+        T  = 6
         dt = 0.01
 
         t_sequence = np.arange(0, T + dt, dt) # 生成时间序列
 
-        YAW_shift  = 20 * deg2arc    # 扫描 震荡角度
-        delta_YAW  = 120 * deg2arc    # 扫描 震荡角度
-        delta_height = 0.3           # 扫描 震荡高度
+        YAW_shift  = 20 * deg2arc     # 扫描 震荡角度
+        delta_YAW  = 180 * deg2arc    # 扫描 震荡角度
+        delta_height = 0.1            # 扫描 震荡高度
 
         omega = 2*np.pi/T
 
@@ -685,6 +735,6 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
                               sensor_data['yaw']]
             print(5)
 
-    print(Drone_Controller.check_target_arrived(), Drone_Controller.check_target_switch(), Drone_Controller.RACING_EXPLORE)
+    # print(Drone_Controller.check_target_arrived(), Drone_Controller.check_target_switch(), Drone_Controller.RACING_EXPLORE)
 
     return control_command 
