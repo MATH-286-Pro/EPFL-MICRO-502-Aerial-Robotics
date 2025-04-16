@@ -265,12 +265,12 @@ class Class_Drone_Controller:
         self.update_drone_quat()                        # 更新无人机四元数
         self.update_drone_position_global()             # 更新无人机坐标
         self.update_camera_position_global()            # 更新相机坐标
-        self.update_IMAGE_TO_VEC_LIST(DEBUG = True)     # 相机坐标系下目标位置列表
+        self.update_IMAGE_TO_VEC_LIST()                 # 相机坐标系下目标位置列表
 
         # 检测
         self.check_target_near()                        # 检测目标点是否到达
         self.check_target_switch()                      # 检测目标切换
-        self.check_is_near_gate(DEBUG = False)
+        self.check_is_near_gate()
 
         # 更新 三角定位 4+1 列表
         self.update_Target_List_with_Buffer()           # 更新目标点列表 [slef.target_pos_list_buffer] 列表数据
@@ -452,7 +452,8 @@ class Class_Drone_Controller:
                 green_value += increment
             cv2.imshow("Rectangle Corners", Feature_Frame)
         else:
-            cv2.imshow("Rectangle Corners", Feature_Frame)
+            if DEBUG:
+                cv2.imshow("Rectangle Corners", Feature_Frame)
 
 
 
