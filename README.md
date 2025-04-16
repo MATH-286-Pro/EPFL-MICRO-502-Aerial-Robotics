@@ -16,7 +16,7 @@ if key == ord('W'):
 elif key == ord('S'):
     forward_velocity = -2.0
 elif key == ord('A'):
-    left_velocity = 2.0
+    left_velocity = 2.0 
 elif key == ord('D'):
     left_velocity = -2.0
 elif key == ord('Q'):
