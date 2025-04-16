@@ -75,7 +75,7 @@ Draw             = False # 是否绘制过轨迹
 # 向量基础函数
 
 # 向量单位化
-def Unit_Vector(v):
+def unit_vector(v):
     norm = np.linalg.norm(v)
     if norm == 0:
         return v  # 返回原始向量
@@ -161,6 +161,7 @@ def save_data(target_pos_list_buffer, file_name = "target_positions"):
 # 计算2点距离函数
 def compute_distance(P1, P2):
     return np.linalg.norm(P1 - P2)
+
 ########################################## 自定基础函数 ##########################################
 
 
@@ -189,12 +190,12 @@ class Class_Drone_Controller:
         self.Drone_POS_GLOBAL      = None  
         self.Camera_POS_GLOBAL     = None
 
-        self.IMAGE_POINTS_2D          = None  # 2D 图像方框列表
+        self.IMAGE_POINTS_2D       = None  # 2D 图像方框列表
         self.IMAGE_TARGET_VEC      = None  # 3D 目标方向
         self.IMAGE_TARGET_VEC_list = []    # 3D 目标方框列表，0-3为矩形的四个点，4为中心点
 
-        self.Drone_YAW_TARGET    = None
-        self.Drone_YAW_NORMAL    = None  
+        self.YAW_TARGET    = None
+        self.YAW_NORMAL    = None  
 
         # 缓存数据 (三角定位)
         self.Drone_Pos_Buffer             = [] # 位置缓存
@@ -202,13 +203,11 @@ class Class_Drone_Controller:
         self.Drone_Target_Vec_List_Buffer = [] # 方向列表缓存
         self.min_cumulative_baseline = 0.3  # 设定累计基线距离阈值
 
-
         self.target_pos_list_buffer = [] # 目标点 4+1 列表
         self.target_pos_list_Valid  = [] # 目标点 4+1 列表    [数据处理后]
 
         # 路径数据记录
-        self.RACING_START_POINT  = None
-        self.RACING_MID_POINT    = None
+        self.RACING_POINTS = []
 
         self.EXAMING             = True
         self.RACING_EXPLORE      = 0     
@@ -221,18 +220,11 @@ class Class_Drone_Controller:
         self.LOCK = False
         self.IMG_LAST_DIRECTION = None # 上一个视觉方向
 
-        # 启动标志
-        self.START_FLAG   = False  
-
-        # 启动记录
+        # 启动函数
         self.update(sensor_data, camera_data) # 更新数据
         self.IMG_direction_Initialize()       # 初始化方向
-
-        # 记录起始位置
-        self.Record_Start_Point()
-
-        # 生成扫描偏移序列
-        self.Generate_Scan_Sequence() 
+        self.Record_Start_Point()             # 记录起始位置
+        self.Generate_Scan_Sequence()         # 生成扫描偏移序列
 
     ########################################## 更新函数 ##########################################
 
@@ -254,18 +246,15 @@ class Class_Drone_Controller:
         self.update_camera_position_global()            # 更新相机坐标
         self.update_IMAGE_TO_VEC_LIST(DEBUG = True)     # 相机坐标系下目标位置列表
 
+        # 检查是否靠近 Gate
+        self.check_is_near_gate(DEBUG = False)
+
         # 更新 三角定位 4+1 列表
         self.update_Target_List_with_Buffer()           # 更新目标点列表 [slef.target_pos_list_buffer] 列表数据
         self.update_Target_list_Valid()                 # 数据处理      [slef.target_pos_list_Valid]  列表数据
 
-        # 检查 + 记录目标点
-        self.Record_Mid_Point()                
-
-        # 检查是否靠近 Gate
-        self.check_is_near_gate(DEBUG = False)
-
         # 更新 YAW 角度
-        self.Compute_YAW_TARGET() # [依赖 update_IMAGE_TO_VEC_LIST]         计算目标 YAW  
+        self.Compute_YAW_TARGET() # [依赖 update_IMAGE_TO_VEC_LIST] 
         self.Compute_YAW_NORMAL() # [依赖 update_Target_List_with_Buffer]
 
     ########################################## 传感器函数 ##########################################
@@ -290,6 +279,7 @@ class Class_Drone_Controller:
         P_Cam_global   = P_Drone_global + P_Drone2Cam_Shift_global     
         self.Camera_POS_GLOBAL =  P_Cam_global   # 相机全局坐标系下位置
     
+    ########################################## 状态检测函数 ##########################################
     def check_target_arrived(self):
         
         try:
@@ -297,8 +287,6 @@ class Class_Drone_Controller:
             drone_pos  = self.update_drone_position_global() # 无人机位置
 
             dist = np.linalg.norm(target_pos - drone_pos)    # 计算距离
-
-            # print("dist", dist, "Target", target_pos)
 
             if dist <= 0.5 and self.EXAMING: 
                 self.EXAMING = False
@@ -324,6 +312,19 @@ class Class_Drone_Controller:
             
         except IndexError:
             return False
+    
+    def check_explored_number(self):
+        if len(self.target_pos_list_Valid) >= 1:
+            self.RACING_EXPLORE = 1
+
+        if len(self.target_pos_list_Valid) >= 2:
+            P_new = self.target_pos_list_Valid[-1][4] 
+            P_old = self.target_pos_list_Valid[-2][4] 
+            P_Diff = compute_distance(P_new, P_old)    # 计算变化量
+
+            if P_Diff >= self.points_filter_threshold:
+                self.RACING_EXPLORE += 1
+
     ########################################## 坐标变换函数 ##########################################
     def Convert_Frame_Drone2World(self, P_DroneFrame):
         Q_Drone2World = self.Q  
@@ -428,11 +429,11 @@ class Class_Drone_Controller:
             for cam_point in self.IMAGE_POINTS_2D:
                 # 目标方向：相机坐标系 -> 无人机坐标系
                 Vector_Cam2Target_DroneFrame = self.Convert_Frame_Cam2Drone(cam_point)    
-                Vector_Cam2Target_DroneFrame = Unit_Vector(Vector_Cam2Target_DroneFrame)  
+                Vector_Cam2Target_DroneFrame = unit_vector(Vector_Cam2Target_DroneFrame)  
 
                 # 目标方向：无人机坐标系 -> 世界坐标系
                 Vector_Cam2Target_WorldFrame = self.Convert_Frame_Drone2World(Vector_Cam2Target_DroneFrame)
-                Vector_Cam2Target_WorldFrame = Unit_Vector(Vector_Cam2Target_WorldFrame)  
+                Vector_Cam2Target_WorldFrame = unit_vector(Vector_Cam2Target_WorldFrame)  
 
                 Vector_Cam2Target_WorldFrame_list.append(Vector_Cam2Target_WorldFrame)    # 添加到列表中
 
@@ -547,9 +548,9 @@ class Class_Drone_Controller:
                 self.target_pos_list_buffer.append(Target_Pos_list) # 目标缓存
 
                 # Debug
-                print("Angle_diff",angle_differnece, 
-                      "Target", Target_Pos_list[4] ,"Target_Diff", np.linalg.norm(Target_Pos_list[4] - GATE[1]), 
-                      "Dist", self.compute_distance_drone_to_target())
+                # print("Angle_diff",angle_differnece, 
+                #       "Target", Target_Pos_list[4] ,"Target_Diff", np.linalg.norm(Target_Pos_list[4] - GATE[1]), 
+                #       "Dist", self.compute_distance_drone_to_target())
 
 
     # 三角定位 目标点数据 处理函数
@@ -566,7 +567,7 @@ class Class_Drone_Controller:
     def Compute_YAW_TARGET(self):
         if self.IMAGE_TARGET_VEC_list is not None:
             Vector_3D = self.IMAGE_TARGET_VEC_list[4]
-            self.Drone_YAW_TARGET = np.arctan2(Vector_3D[1], Vector_3D[0])  # 计算 YAW 角度
+            self.YAW_TARGET = np.arctan2(Vector_3D[1], Vector_3D[0])  # 计算 YAW 角度
         else: 
             return None
     
@@ -586,7 +587,7 @@ class Class_Drone_Controller:
             normal_angle = theta - np.pi / 2
             normal_vector = np.array([np.cos(normal_angle), np.sin(normal_angle), 0]) #FF0000 注意这个是不精确的法向量
 
-            self.Drone_YAW_NORMAL = normal_angle 
+            self.YAW_NORMAL = normal_angle 
             self.Drone_YAW_NORMAL_VEC = normal_vector
 
     ############################################## 目标点记录函数 ##############################################
@@ -595,22 +596,12 @@ class Class_Drone_Controller:
     def Record_Start_Point(self):
         POS = self.update_drone_position_global()
         YAW = self.sensor_data['yaw']
-        self.RACING_START_POINT = [POS[X], POS[Y], 1.0, YAW] 
+
+        point_data = np.array([POS[X], POS[Y], POS[Z], YAW])
+
+        self.RACING_POINTS.append(point_data)
     
-    # 记录 Gate 位置
-    def Record_Mid_Point(self):
-        
-        if self.check_target_switch():
-            self.RACING_BEGIN_INDEX.append(len(self.target_pos_list_buffer) - 1) # 记录索引
-        
-        if self.check_target_arrived():
-            self.RACING_END_INDEX.append(len(self.target_pos_list_buffer))
-            self.RACING_EXPLORE += 1
-            # print("Gate %d Arrived" % self.RACING_EXPLORE)
-        
-        if self.RACING_EXPLORE >= 5:
-            self.RACING_EXPLORE_DONE = True
-        
+
     ############################################## 轨迹生成函数 ##############################################
 
     # def Generate_Trajectory(self, T = 3, dt = 0.1):
@@ -713,7 +704,7 @@ class Class_Drone_Controller:
         POS = self.update_drone_position_global()
         # POS = POS + direction_target * 1.0 + self.constant_drift_in_Y() * 0.5 # 目标位置 + 偏移量 #FF0000  
         POS = POS + direction_target * 1.0 + self.constant_drift_in_Y() * self.coefficient_drift_in_Y() # 目标位置 + 偏移量 #FF0000  
-        YAW = self.Drone_YAW_TARGET
+        YAW = self.YAW_TARGET
 
         command = [POS[X], POS[Y], POS[Z], YAW] # 目标位置 + YAW
 
@@ -804,65 +795,20 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
     # ---- YOUR CODE HERE ----
 
     #FF0000         
-    
     # 如果没看到粉色 
     if Drone_Controller.IMAGE_POINTS_2D is None:
         control_command = Drone_Controller.Start_Scan_Command() 
-        # print(1)
 
     # 如果看到粉色 + 离目标点较远 + 未切换目标
     elif (Drone_Controller.IMAGE_POINTS_2D is not None):
 
         Drone_Controller.scan_FLAG_RESTART = True        # 重启扫描标志位
 
-        # 距离 Gate 较远 
-        # 需要解锁
-        # 视觉导航
-        if (not Drone_Controller.check_target_arrived()):
-            Drone_Controller.LOCK = False
-            control_command = Drone_Controller.IMG_command()
-            # print(2)
-
-        # 距离 Gate 较近 
-        # 需要上锁
-        # 上锁导航
-        elif (Drone_Controller.check_target_arrived()):
-            Drone_Controller.LOCK = True
-            control_command = Drone_Controller.IMG_command()
-            # print(3)
-
-
-        # 未知情况
-        else:
-            control_command = [sensor_data['x_global'], 
-                               sensor_data['y_global'], 
-                               sensor_data['z_global'],
-                               sensor_data['yaw']]
-            # print(5)
-
-    # print(Drone_Controller.check_target_arrived(), Drone_Controller.check_target_switch(), Drone_Controller.RACING_EXPLORE)
-
+        control_command = Drone_Controller.IMG_command() # 视觉指令
+            
     if Total_Time > 23.0 and Draw == False:
-        target_center_record = Drone_Controller.target_pos_list_buffer[:][4] # 目标中心点
-        
-        # plt.plot(target_center_record)
-        # plt.show()
-        
-        plt.plot(target_center_record)
-        plt.savefig("trajectory.png")  # 将图保存为文件
-
-        save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions") # 保存数据
+        save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")          # 保存数据
         save_data(Drone_Controller.target_pos_list_Valid,  file_name="target_positions_filtered") # 保存数据
-
         Draw = True
-
-    # if Total_Time > 5.0:
-    #     target_center_record = Drone_Controller.target_pos_list_buffer[:][4] # 目标中心点
-        
-    #     plt.ion()  # 开启交互模式
-    #     # 在合适的位置绘图并刷新：
-    #     target_center_record = Drone_Controller.target_pos_list_buffer[:][4] # 目标中心点
-    #     plt.plot(target_center_record)
-    #     plt.pause(0.001)
 
     return control_command 
