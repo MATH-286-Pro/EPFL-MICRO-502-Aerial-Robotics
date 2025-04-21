@@ -274,7 +274,8 @@ class Class_Drone_Controller:
 
         # 更新 三角定位 4+1 列表
         self.update_Target_List_with_Buffer()           # 更新目标点列表 [slef.target_pos_list_buffer] 列表数据
-        self.update_Target_list_Valid()                 # 数据处理      [slef.target_pos_list_Valid]  列表数据
+        # self.update_Target_list_Filtered_CallBack()   # 数据处理      [slef.target_pos_list_Valid]  列表数据
+        # 该函数被并入 update_Target_List_with_Buffer() 中
 
         # 更新 YAW 角度
         self.Compute_YAW_TARGET() # [依赖 update_IMAGE_TO_VEC_LIST] 
@@ -433,7 +434,7 @@ class Class_Drone_Controller:
         if largest_rect is not None:
             largest_rect     = np.squeeze(largest_rect, axis=1)                     # 将 4x1x2 的数组转换为 4x2 的数组
             rect_center      = compute_target_center(largest_rect)                  # np.Float64
-            largest_rect     = SORT(largest_rect)                                    #FF0000 添加测试
+            largest_rect     = SORT(largest_rect)                                   # 点排序
             target_rect      = np.append(largest_rect, [rect_center], axis = 0)     # 添加中心点
 
             # 更新图像点
@@ -541,9 +542,9 @@ class Class_Drone_Controller:
             dist_difference  = np.linalg.norm(self.Drone_Pos_Buffer[-1] - self.Drone_Pos_Buffer[0])
             angle_differnece = compute_angle(self.Drone_Target_Vec_List_Buffer[-1][4], self.Drone_Target_Vec_List_Buffer[0][4])
 
-            
-            
             # 移动距离大于 最小设定值
+            # 1.更新 List_Buffer
+            # 2.回调函数滤波 List_Filtered
             if dist_difference >= self.min_cumulative_baseline and angle_differnece >= 0.01:
                 
                 # 初始化
@@ -560,22 +561,19 @@ class Class_Drone_Controller:
                 self.Drone_Pos_Buffer             = [] # 清空缓存
                 self.Drone_Target_Vec_List_Buffer = []
 
-                # # 缓存保留部分数据
-                # length = len(self.Drone_Pos_Buffer)
-                # self.Drone_Pos_Buffer = [self.Drone_Pos_Buffer[length - 2]]                         # 保留帧数据
-                # self.Drone_Target_Vec_List_Buffer = [self.Drone_Target_Vec_List_Buffer[length - 2]] # 保留帧数据
-
                 # 更新目标值
                 self.target_pos_list_buffer.append(Target_Pos_list) # 目标缓存
 
-                # Debug
-                # print("Angle_diff",angle_differnece, 
-                #       "Target", Target_Pos_list[4] ,"Target_Diff", np.linalg.norm(Target_Pos_list[4] - GATE[1]), 
-                #       "Dist", self.compute_distance_drone_to_target())
+                # 回调函数滤波
+                self.update_Target_list_Filtered_CallBack() # 目标点数据处理函数
 
 
-    # 三角定位 目标点数据 处理函数
-    def update_Target_list_Valid(self):
+
+
+    # Filter 函数 (三角定位 目标点数据 处理函数) 👆
+    # 作为回调函数，在每次 self.target_pos_list_buffer 更新时被调用
+    # 否则如果 self.target_pos_list_buffer 不更新，并且最后两个数据接近，则会一直添加到 self.target_pos_list_Valid 中
+    def update_Target_list_Filtered_CallBack(self):
         if len(self.target_pos_list_buffer) >= 2:
             P_new = self.target_pos_list_buffer[-1][4] # 最新目标点
             P_old = self.target_pos_list_buffer[-2][4] # 上一个目标点
@@ -583,6 +581,9 @@ class Class_Drone_Controller:
 
             if P_Diff <= 0.2:
                 self.target_pos_list_Valid.append(self.target_pos_list_buffer[-1]) # 目标点缓存
+
+                #FF0000 测试 打印中心点
+                print(self.target_pos_list_Valid[-1][4])
 
     ############################################# 计算目标 YAW #############################################
     def Compute_YAW_TARGET(self):
@@ -651,7 +652,7 @@ class Class_Drone_Controller:
     #     return trajectory
 
 
-    ############################################ 基于图像控制器 ##############################################
+    ############################################ 视觉导航 ##############################################
 
     # 常数偏移
     def constant_drift_in_Y(self):
@@ -663,7 +664,8 @@ class Class_Drone_Controller:
     
     # 计算 目标-无人机 距离
     def compute_distance_drone_to_target(self):
-        if self.target_pos_list_buffer is not None:
+        # dist = 0.0
+        if len(self.target_pos_list_buffer) > 0:
             target_pos = self.target_pos_list_buffer[-1][4]
             drone_pos  = self.Drone_POS_GLOBAL
             dist = np.linalg.norm(target_pos - drone_pos)    # 计算距离
@@ -773,7 +775,7 @@ class Class_Drone_Controller:
         
         return control_command
 
-    ############################################### 基于位置控制器 ##############################################
+    ############################################### 定位导航 ##############################################
     def stay(self):
         return [self.Drone_POS_GLOBAL[X], self.Drone_POS_GLOBAL[Y], self.Drone_POS_GLOBAL[Z], self.sensor_data['yaw']]
 
@@ -856,6 +858,12 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
 
     Total_Time += dt # 累计时间
 
+    # 保存数据
+    if Total_Time > 10.0 and Draw == False:
+        save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")          # 保存数据
+        save_data(Drone_Controller.target_pos_list_Valid,  file_name="target_positions_filtered") # 保存数据
+        Draw = True
+
     # 判断是否第一次运行
     if Drone_Controller is None:
         Drone_Controller = Class_Drone_Controller(sensor_data, camera_data)  # 创建无人机控制器对象
@@ -868,7 +876,7 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
     if sensor_data['z_global'] < 0.49:
         control_command = [sensor_data['x_global'], sensor_data['y_global'], 1.0, sensor_data['yaw']]
         return control_command
-
+        
     # ---- YOUR CODE HERE ----    
 
     #FF0000 完成探索
@@ -877,9 +885,8 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
 
     #FF0000 未完成探索
     else:
-        control_command = Drone_Controller.get_IMG_command()
-        # control_command = Drone_Controller.get_triangulate_command() # 三角定位指令
+        # control_command = Drone_Controller.get_IMG_command()
+        control_command = Drone_Controller.get_triangulate_command() # 三角定位指令
 
-    # print(Drone_Controller.AT_GATE)
 
     return control_command 

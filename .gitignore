@@ -137,3 +137,5 @@ dmypy.json
 
 # Occupancy map
 map.png
+target_positions_filtered.csv
+target_positions.csv
