@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 
 exp_num = 4                        # 0: Coordinate Transformation, 1: PID Tuning, 2: Kalman Filter, 3: Motion Planning, 4: Project
 control_style = 'path_planner'     # 'keyboard' or 'path_planner'
-rand_env = False                   # Randomise the environment
+rand_env = True                    # Randomise the environment
 
 # Global variables for handling threads
 latest_sensor_data = None
@@ -325,9 +325,11 @@ class CrazyflieInDroneDome(Supervisor):
             # Print the current progress
             if drone.segment > 1:
                 if drone.gate_progress[drone.lap][drone.segment-2]:
-                    print('Moving to the next segment after successfully passing gate', drone.segment-2)
+                    pass
+                    # print('Moving to the next segment after successfully passing gate', drone.segment-2)
                 else:
-                    print('Moving to the next segment after failing to pass gate', drone.segment-2)
+                    pass
+                    # print('Moving to the next segment after failing to pass gate', drone.segment-2)
 
         # Check if the drone has reached the gate in this segment
         if drone.segment != -1:

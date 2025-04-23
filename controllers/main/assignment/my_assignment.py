@@ -224,7 +224,7 @@ class Class_Drone_Controller:
         self.Drone_Pos_Buffer             = [] # 位置缓存
         self.Drone_Target_Vec_Buffer      = [] # 方向缓存
         self.Drone_Target_Vec_List_Buffer = [] # 方向列表缓存
-        self.min_cumulative_baseline = 0.3  # 设定累计基线距离阈值
+        self.min_cumulative_baseline      = 0.5  # 设定累计基线距离阈值 #00FF00
 
         self.target_pos_list_buffer = [] # 目标点 4+1 列表
         self.target_pos_list_Valid  = [] # 目标点 4+1 列表    [数据处理后]
@@ -234,9 +234,9 @@ class Class_Drone_Controller:
 
         self.AT_GATE             = False # 是否到达 Gate
         self.EXAMING             = True
-        self.RACING_EXPLORE      = 1     
+        self.RACING_EXPLORE      = 0     
 
-        self.RACING_POINT_INDEX  = [0] # 记录索引，用于记录 某个Gate 起始 index
+        self.RACING_POINT_INDEX  = [] # 记录索引，用于记录 某个Gate 起始 index
 
         # 视觉命令锁
         self.LOCK = False
@@ -267,15 +267,17 @@ class Class_Drone_Controller:
         self.update_camera_position_global()            # 更新相机坐标
         self.update_IMAGE_TO_VEC_LIST(DEBUG = True)     # 相机坐标系下目标位置列表
 
-        # 检测
-        self.check_target_near()                        # 检测目标点是否到达
-        self.check_target_switch()                      # 检测目标切换
-        self.check_is_near_gate(DEBUG = False)
 
         # 更新 三角定位 4+1 列表
-        self.update_Target_List_with_Buffer()           # 更新目标点列表 [slef.target_pos_list_buffer] 列表数据
-        # self.update_Target_list_Filtered_CallBack()   # 数据处理      [slef.target_pos_list_Valid]  列表数据
-        # 该函数被并入 update_Target_List_with_Buffer() 中
+        self.update_Target_List_with_Buffer()               # 更新目标点列表 [slef.target_pos_list_buffer] 列表数据
+        #  self.update_Target_list_Filtered_CallBack()      # 数据滤波
+        #    self.check_target_switch() # 检测目标切换       # 是否切换目标
+
+        # 检测
+        self.check_target_AtGate()                       # 检测目标点是否到达
+        # self.check_target_switch()                       # 检测目标切换
+        self.check_is_near_gate_Vision(DEBUG = False)
+
 
         # 更新 YAW 角度
         self.Compute_YAW_TARGET() # [依赖 update_IMAGE_TO_VEC_LIST] 
@@ -304,52 +306,76 @@ class Class_Drone_Controller:
         self.Camera_POS_GLOBAL =  P_Cam_global   # 相机全局坐标系下位置
     
     ########################################## 状态检测函数 ##########################################
-    def check_target_near(self):
+    
+    # 基于距离检测
+    def check_target_AtGate(self):
         
         if self.AT_GATE:
-            return False
+            return True
+        
+        else:
+            try:
+                target_pos = self.target_pos_list_Valid[-1][4]   # 目标位置
+                drone_pos  = self.update_drone_position_global() # 无人机位置
 
-        try:
-            target_pos = self.target_pos_list_Valid[-1][4]   # 目标位置
-            drone_pos  = self.update_drone_position_global() # 无人机位置
+                dist = compute_distance(target_pos, drone_pos)   # 计算距离
 
-            dist = compute_distance(target_pos, drone_pos)    # 计算距离
+                # 到达目标点范围
+                if dist <= 0.2:  #00FF00 后续需要调整
 
-            # 到达目标点范围
-            if dist <= 0.2:  
+                    # 第一次检测到到达范围
+                    self.AT_GATE = True   
 
-                # 第一次检测到到达范围
-                self.AT_GATE = True   
-                return True
-            
-            else:
+                    print("到达目标点范围！")
+
+                    return True
+                
+                else:
+                    self.AT_GATE = False # 重新开始
+                    return False
+                
+            except IndexError:
                 return False
-            
-        except IndexError:
-            return False
     
+    # 基于检测位置突变
     def check_target_switch(self):
+        
+        if len(self.target_pos_list_Valid) == 0:
+            return False
+        
+        if len(self.target_pos_list_Valid) != 0:
 
-        try:
-            prev = self.target_pos_list_Valid[-2][4]  # 目标位置
-            curr = self.target_pos_list_Valid[-1][4]  # 目标位置
-            delta = compute_distance(prev, curr) # 计算目标点差值
+            # 检测从 0-> 1 的突变
+            if len(self.target_pos_list_Valid) == 1:
+                self.RACING_EXPLORE += 1
+                self.RACING_POINT_INDEX.append(0) # 记录索引
+                print(self.RACING_EXPLORE-1, "->", self.RACING_EXPLORE, "目标点切换！")  
+
+                self.AT_GATE = False # 重新开始
+
+                return True
 
             # 检测到下一个点
-            if delta >= 2.0: 
-                self.RACING_EXPLORE += 1
-                self.RACING_POINT_INDEX.append(len(self.target_pos_list_Valid) - 1) # 记录索引
+            if len(self.target_pos_list_Valid) >= 2:
+                prev = self.target_pos_list_Valid[-2][4]  # 目标位置
+                curr = self.target_pos_list_Valid[-1][4]  # 目标位置
+                delta = compute_distance(prev, curr) # 计算目标点差值
 
-                self.AT_GATE = False # 清除在"目标点附近"标志
-                return True
-            else:
-                return False
-            
-        except IndexError:
-            return False
+                if delta >= 2.0: 
+                    self.RACING_EXPLORE += 1
+                    self.RACING_POINT_INDEX.append(len(self.target_pos_list_Valid) - 1)
+                    print(self.RACING_EXPLORE-1, "->", self.RACING_EXPLORE, "目标点切换！") 
+
+                    self.AT_GATE = False # 重新开始
+
+                    return True
+                else:
+                    return False        
 
 
-    def check_is_near_gate(self, DEBUG = False):
+    # 基于图像识别
+    # 检测粉色是否出现在边缘
+    def check_is_near_gate_Vision(self, DEBUG = False):
         """
         检测输入的二维点集合（如 (N,2) 的 numpy 数组）中是否至少有两个点的 X 或 Y 坐标等于 0 或 300。
         """
@@ -529,7 +555,7 @@ class Class_Drone_Controller:
 
         # 如果视野内无目标，不能将 None 添加到缓存中
         # #0000FF 大写代表实时更新数据，实时数据会包含 None #0000FF
-        if (self.Drone_POS_GLOBAL is not None) and (self.IMAGE_TARGET_VEC_list is not None) and (not self.check_is_near_gate()):
+        if (self.Drone_POS_GLOBAL is not None) and (self.IMAGE_TARGET_VEC_list is not None) and (not self.check_is_near_gate_Vision()):
 
             # 同时更新 Buffer
             self.Drone_Pos_Buffer.append(self.Drone_POS_GLOBAL)
@@ -579,11 +605,14 @@ class Class_Drone_Controller:
             P_old = self.target_pos_list_buffer[-2][4] # 上一个目标点
             P_Diff = compute_distance(P_new, P_old)    # 计算变化量
 
+            # 过滤目标点
             if P_Diff <= 0.2:
-                self.target_pos_list_Valid.append(self.target_pos_list_buffer[-1]) # 目标点缓存
+                self.target_pos_list_Valid.append(self.target_pos_list_buffer[-1]) # 目标点 4+1 缓存
+
+                self.check_target_switch() # 检测目标切换
 
                 #FF0000 测试 打印中心点
-                print(self.target_pos_list_Valid[-1][4])
+                # print(self.target_pos_list_Valid[-1][4])
 
     ############################################# 计算目标 YAW #############################################
     def Compute_YAW_TARGET(self):
@@ -664,9 +693,9 @@ class Class_Drone_Controller:
     
     # 计算 目标-无人机 距离
     def compute_distance_drone_to_target(self):
-        # dist = 0.0
-        if len(self.target_pos_list_buffer) > 0:
-            target_pos = self.target_pos_list_buffer[-1][4]
+        dist = 0.0
+        if len(self.target_pos_list_Valid) > 0:
+            target_pos = self.target_pos_list_Valid[-1][4]
             drone_pos  = self.Drone_POS_GLOBAL
             dist = np.linalg.norm(target_pos - drone_pos)    # 计算距离
         return dist
@@ -692,7 +721,7 @@ class Class_Drone_Controller:
     def coefficient_drift_in_Y(self):
 
         # 阈值
-        Dist_Threshold = 2.0 # 距离阈值
+        Dist_Threshold = 1.5 # 距离阈值
 
         # 分段函数
         if self.compute_distance_drone_to_target() > Dist_Threshold:
@@ -780,6 +809,8 @@ class Class_Drone_Controller:
         return [self.Drone_POS_GLOBAL[X], self.Drone_POS_GLOBAL[Y], self.Drone_POS_GLOBAL[Z], self.sensor_data['yaw']]
 
     def get_triangulate_command(self):
+
+        # 直接取 target_pos_list_Valid 中的最后一个点
         if len(self.target_pos_list_Valid) > 0:
             target_pos = self.target_pos_list_Valid[-1][4]
             target_YAW = self.YAW_TARGET
@@ -788,8 +819,48 @@ class Class_Drone_Controller:
         else:
             return self.stay()
 
+    # def get_mix_command(self):
+        
+    #     # 默认命令为 视觉命令
+    #     sign = "VISION"
+    #     command = self.get_IMG_command()
+
+    #     # 如果目标切换
+    #     if self.check_target_switch():
+    #         # 目标切换，使用三角定位命令
+    #         command = self.get_triangulate_command()
+    #         sign = "TRIANGULATE"
+        
+    #     # 如果到达目标点
+    #     if self.check_target_AtGate():
+    #         # 到达目标点，使用三角定位命令
+    #         command = self.get_IMG_command()
+    #         sign = "VISION"
+
+    #     print("Command: ", sign)
+        
+    #     return command
 
 
+    def get_mix_command(self):
+        
+        # 默认命令为 视觉命令
+        sign = "定位"
+        command = self.get_triangulate_command()
+        
+        # 如果到达目标点
+        if self.check_target_AtGate():
+            # 到达目标点，使用视觉命令
+            command = self.get_IMG_command()
+            sign = "视觉"
+        
+        else:
+            # 目标切换，使用三角定位命令
+            command = self.get_triangulate_command()
+
+        print("Command: ", sign)
+        
+        return command
     ############################################### 扫描函数 ##############################################
     def Generate_Scan_Sequence(self):
         T  = 10
@@ -859,7 +930,7 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
     Total_Time += dt # 累计时间
 
     # 保存数据
-    if Total_Time > 10.0 and Draw == False:
+    if Total_Time > 25.0 and Draw == False:
         save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")          # 保存数据
         save_data(Drone_Controller.target_pos_list_Valid,  file_name="target_positions_filtered") # 保存数据
         Draw = True
@@ -873,7 +944,7 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
     Drone_Controller.update(sensor_data, camera_data) 
 
     # Take off example
-    if sensor_data['z_global'] < 0.49:
+    if sensor_data['z_global'] < 0.6:
         control_command = [sensor_data['x_global'], sensor_data['y_global'], 1.0, sensor_data['yaw']]
         return control_command
         
@@ -885,8 +956,8 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
 
     #FF0000 未完成探索
     else:
-        # control_command = Drone_Controller.get_IMG_command()
-        control_command = Drone_Controller.get_triangulate_command() # 三角定位指令
-
+        control_command = Drone_Controller.get_IMG_command()
+        # control_command = Drone_Controller.get_triangulate_command() # 三角定位指令
+        # control_command = Drone_Controller.get_mix_command() # 混合指令
 
     return control_command 
