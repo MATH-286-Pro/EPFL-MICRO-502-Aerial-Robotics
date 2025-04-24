@@ -6,7 +6,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 class MotionPlanner3D():
     
     #Question: SIMON PID, what is vel_max set for PID? Check should be same here
-    def __init__(self, obstacles, points, DEBUG = False):
+    def __init__(self, obstacles, path, DEBUG = False):
         # Inputs:
         # - start: The sequence of input path waypoints provided by the path-planner, including the start and final goal position: Vector of m waypoints, consisting of a tuple with three reference positions each as provided by AStar 
         # - obstacles: 2D array with obstacle locations and obstacle widths [x, y, z, dx, dy, dz]*n_obs
@@ -22,14 +22,6 @@ class MotionPlanner3D():
         ## DO NOT MODIFY --------------------------------------------------------------------------------------- ##
         # self.ast = AStar3D(start, goal, grid_size, obstacles, bounds)
 
-        # 重构 path，将 Gate 5 移植首位作为起点，并且再添加 Gate 5 作为终点
-        path = []
-        path.append(points[-1])
-        path.extend(points[0:-1])
-        path.append(points[-1])
-        path.append([1, 4, 0.6]) #00FF00 添加起点
-        path.extend(points)
-        path.append([1, 4, 0.6]) #00FF00 添加起点
 
         self.path = path
 
