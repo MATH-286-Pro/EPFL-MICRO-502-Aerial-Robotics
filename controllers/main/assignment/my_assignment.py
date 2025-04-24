@@ -7,6 +7,10 @@ import matplotlib
 matplotlib.use('Agg')  # 使用非交互式后端
 import matplotlib.pyplot as plt
 
+
+from assignment.filter import *
+from assignment.planning import *
+
 # The available ground truth state measurements can be accessed by calling sensor_data[item]. All values of "item" are provided as defined in main.py within the function read_sensors. 
 # The "item" values that you may later retrieve for the hardware project are:
 
@@ -69,6 +73,7 @@ GATE = np.array([
 Drone_Controller = None
 Total_Time       = 0
 Draw             = False # 是否绘制过轨迹
+Explore_State    = 0     # 0 代表在探索中，1 代表探索完毕
 
 ########################################## 自定基础函数 ##########################################
 
@@ -242,10 +247,16 @@ class Class_Drone_Controller:
         self.LOCK = False
         self.IMG_LAST_DIRECTION = None # 上一个视觉方向
 
+        # 巡航
+        self.RACING_INDEX = 0
+        self.RACING_PATH         = None
+        self.LAST_RACING_COMMAND = None # 上一个巡航命令
+
         # 启动函数
-        self.update(sensor_data, camera_data) # 更新数据
-        self.Record_Start_Point_command()     # 记录起始位置
-        self.Generate_Scan_Sequence()         # 生成扫描偏移序列
+        self.update(sensor_data, camera_data)  # 更新数据
+        self.Record_Start_Point_command()      # 记录起始位置
+        self.Generate_Scan_Sequence()          # 生成扫描偏移序列
+        self.LAST_RACING_COMMAND = self.stay() # 初始化巡航命令
 
     ########################################## 更新函数 ##########################################
 
@@ -653,34 +664,6 @@ class Class_Drone_Controller:
         self.RACING_POINTS_COMMAND.append(point_data)
     
 
-    ############################################## 轨迹生成函数 ##############################################
-
-    # def Generate_Trajectory(self, T = 3, dt = 0.1):
-    #     p0 = self.Camera_POS_GLOBAL
-    #     pT  = self.target_pos_list_buffer[0][4] + self.Drone_YAW_NORMAL_VEC * 0.8 # 使用第一个目标点测试
-
-    #     v0 = np.array([self.sensor_data['v_x'],
-    #                     self.sensor_data['v_y'],
-    #                     self.sensor_data['v_z']])
-    #     vT  = self.Drone_YAW_NORMAL_VEC
-
-    #     # 根据起始条件构建三次多项式的系数
-    #     a0 = p0
-    #     a1 = v0
-    #     Delta = pT - p0 - v0 * T
-    #     a2 = (3 * Delta) / (T ** 2) - (2 * v0 + vT) / T
-    #     a3 = (-2 * Delta) / (T ** 3) + (v0 + vT) / (T ** 2)
-
-    #     # 生成轨迹数据点
-    #     t_vals = np.arange(0, T + dt, dt)
-    #     trajectory = np.array([a0 + a1 * t + a2 * t**2 + a3 * t**3 for t in t_vals])
-
-    #     self.test_trajectory     = trajectory.copy() # 测试轨迹
-    #     self.test_trajectory_idx = 0
-
-    #     return trajectory
-
-
     ############################################ 视觉导航 ##############################################
 
     # 常数偏移
@@ -819,28 +802,6 @@ class Class_Drone_Controller:
         else:
             return self.stay()
 
-    # def get_mix_command(self):
-        
-    #     # 默认命令为 视觉命令
-    #     sign = "VISION"
-    #     command = self.get_IMG_command()
-
-    #     # 如果目标切换
-    #     if self.check_target_switch():
-    #         # 目标切换，使用三角定位命令
-    #         command = self.get_triangulate_command()
-    #         sign = "TRIANGULATE"
-        
-    #     # 如果到达目标点
-    #     if self.check_target_AtGate():
-    #         # 到达目标点，使用三角定位命令
-    #         command = self.get_IMG_command()
-    #         sign = "VISION"
-
-    #     print("Command: ", sign)
-        
-    #     return command
-
 
     def get_mix_command(self):
         
@@ -861,9 +822,9 @@ class Class_Drone_Controller:
         print("Command: ", sign)
         
         return command
-    ############################################### 扫描函数 ##############################################
+    ############################################### 扫描模式 ##############################################
     def Generate_Scan_Sequence(self):
-        T  = 10
+        T  = 15
         dt = 0.01
 
         t_sequence = np.arange(0, T + dt, dt) # 生成时间序列
@@ -903,6 +864,44 @@ class Class_Drone_Controller:
 
         return command
 
+    ############################################### 巡航模式 ##############################################
+    def get_Racing_command(self):
+        
+        
+        # 如果在 index 内
+        try:
+            command = self.RACING_PATH[self.RACING_INDEX]
+
+            try: 
+                pos1 = self.RACING_PATH[self.RACING_INDEX]
+                pos2 = self.RACING_PATH[self.RACING_INDEX + 1]
+
+                yaw = np.arctan2(pos2[1] - pos1[1], pos2[0] - pos1[0]) # 计算 YAW 角度
+
+                command[3] = yaw # 目标位置 + YAW
+
+            except IndexError:
+                yaw = self.sensor_data['yaw'] # 当前 YAW 角度
+                command[3] = yaw              # 目标位置 + YAW
+
+            command = command.tolist() # 转换为列表
+
+            # self.RACING_INDEX += 1
+
+        # 如果不在 index 内
+        except IndexError:
+            command = self.stay()
+        
+        
+        # 控制命令一致性
+        Current_Pos = self.Drone_POS_GLOBAL
+        Target_Pos  = command[0:3]
+        distance = compute_distance(Current_Pos, Target_Pos) # 计算距离
+
+        if distance < 1.0: # 到达目标点范围
+            self.RACING_INDEX += 1
+
+        return command
 
 
 
@@ -925,15 +924,14 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
     # If you want to display the camera image you can call it main.py.
 
     #0000FF 当前控制命令
-    global Drone_Controller, Total_Time, Draw
+    global Drone_Controller, Total_Time, Draw, Explore_State
 
     Total_Time += dt # 累计时间
 
-    # 保存数据
-    if Total_Time > 25.0 and Draw == False:
-        save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")          # 保存数据
-        save_data(Drone_Controller.target_pos_list_Valid,  file_name="target_positions_filtered") # 保存数据
-        Draw = True
+    # # 保存数据
+    # if Total_Time > 25.0 and Draw == False:
+    #     save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")          # 保存数据
+    #     Draw = True
 
     # 判断是否第一次运行
     if Drone_Controller is None:
@@ -950,14 +948,31 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
         
     # ---- YOUR CODE HERE ----    
 
-    #FF0000 完成探索
-    if Drone_Controller.AT_GATE and Drone_Controller.RACING_EXPLORE == 5:
-        control_command = Drone_Controller.RACING_POINTS_COMMAND[0].tolist() # 记录起始点
-
-    #FF0000 未完成探索
-    else:
+    # 在探索中 #FF0000
+    if Explore_State == 0: # 探索状态
         control_command = Drone_Controller.get_IMG_command()
-        # control_command = Drone_Controller.get_triangulate_command() # 三角定位指令
-        # control_command = Drone_Controller.get_mix_command() # 混合指令
+
+        # 探索完毕标志位
+        if Drone_Controller.AT_GATE and Drone_Controller.RACING_EXPLORE == 5 or Total_Time > 25.0:
+
+            # 修改标志位
+            Explore_State = 1
+
+            # 保存数据
+            save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")
+
+            # 数据处理
+            data = AggregatedExtractor(csv_path='target_positions.csv')
+            data.get_aggregated()
+            points = data.convert_to_planning()
+
+            # 路径规划
+            planner = MotionPlanner3D(obstacles=None, points=points)
+            Drone_Controller.RACING_PATH = planner.trajectory_setpoints
+     
+    # 探索完毕 #FF0000
+    elif Explore_State == 1: # 探索完毕
+        control_command = Drone_Controller.get_Racing_command() # 路径规划命令
+
 
     return control_command 

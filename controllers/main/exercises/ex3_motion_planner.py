@@ -19,14 +19,17 @@ class MotionPlanner3D():
         self.ast = AStar3D(start, goal, grid_size, obstacles, bounds)
         self.path = self.ast.find_path()
 
+        self.path = ... # 需要重新设置
+
         self.trajectory_setpoints = None
 
         self.init_params(self.path)
 
-        self.run_planner(obstacles, self.path)
+        self.run_planner(obstacles, self.path) # 计算所有数据
 
         # ---------------------------------------------------------------------------------------------------- ##
-
+    #00FF00 #00FF00
+    # 根据起点，终点，以及经过点规划轨迹
     def run_planner(self, obs, path_waypoints):    
         # Run the subsequent functions to compute the polynomial coefficients and extract and visualize the trajectory setpoints
          ## DO NOT MODIFY --------------------------------------------------------------------------------------- ##
@@ -62,11 +65,11 @@ class MotionPlanner3D():
         # SOLUTION ---------------------------------------------------------------------------------- ## 
         
         A_m = np.array([
-            [t**5, t**4, t**3, t**2, t, 1], #pos
-            [5*(t**4), 4*(t**3), 3*(t**2), 2*t, 1, 0], #vel
-            [20*(t**3), 12*(t**2), 6*t, 2, 0, 0], #acc  
-            [60*(t**2), 24*t, 6, 0, 0, 0], #jerk
-            [120*t, 24, 0, 0, 0, 0] #snap
+            [t**5, t**4, t**3, t**2, t, 1],            # pos
+            [5*(t**4), 4*(t**3), 3*(t**2), 2*t, 1, 0], # vel
+            [20*(t**3), 12*(t**2), 6*t, 2, 0, 0],      # acc  
+            [60*(t**2), 24*t, 6, 0, 0, 0],             # jerk
+            [120*t, 24, 0, 0, 0, 0]                    # snap
         ])
 
         return A_m
@@ -81,8 +84,8 @@ class MotionPlanner3D():
 
         # Use the following variables and the class function self.compute_poly_matrix(t) to solve for the polynomial coefficients
         
-        seg_times = np.diff(self.times) #The time taken to complete each path segment
-        m = len(path_waypoints) #Number of path waypoints (including start and end)
+        seg_times = np.diff(self.times) # The time taken to complete each path segment
+        m = len(path_waypoints)         # Number of path waypoints (including start and end)
         poly_coeffs = np.zeros((6*(m-1),3))
 
         # YOUR SOLUTION HERE ---------------------------------------------------------------------------------- ## 

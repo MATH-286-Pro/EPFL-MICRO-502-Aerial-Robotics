@@ -16,9 +16,9 @@ import threading
 import cv2 #00FF00 添加测试
 import matplotlib.pyplot as plt
 
-exp_num = 3                        # 0: Coordinate Transformation, 1: PID Tuning, 2: Kalman Filter, 3: Motion Planning, 4: Project
+exp_num = 4                        # 0: Coordinate Transformation, 1: PID Tuning, 2: Kalman Filter, 3: Motion Planning, 4: Project
 control_style = 'path_planner'     # 'keyboard' or 'path_planner'
-rand_env = True                    # Randomise the environment
+rand_env = False                   # Randomise the environment
 
 # Global variables for handling threads
 latest_sensor_data = None
@@ -120,8 +120,9 @@ class CrazyflieInDroneDome(Supervisor):
 
         # Handle global setpoints to system depending on exercise
         if exp_num == 3:
+            # 路径规划模式
             start = (0.0, 0.0, 0.5)
-            goal = (5, 1, 1)
+            goal  = (5, 1, 1)
             grid_size = 0.25
             obstacles = [(0.75, 0.25, 0.0, 0.4, 0.4, 1.5),
                         (1.25, 1.625, 0.0, 0.4, 0.4, 1.5),
@@ -134,12 +135,13 @@ class CrazyflieInDroneDome(Supervisor):
                         (2.5, 2.75, 0.125, 0.5, 0.25, 0.875)
                         ]  # (x, y, z, width_x, width_y, width_z)
             bounds = (0, 5, 0, 3, 0, 1.5)  # (x_min, x_max, y_min, y_max, z_min, z_max)
-            mp_obj = MP(start, obstacles, bounds, grid_size, goal)
-            self.setpoints = mp_obj.trajectory_setpoints
+            mp_obj = MP(start, obstacles, bounds, grid_size, goal) #00FF00 使用路径规划
+            self.setpoints  = mp_obj.trajectory_setpoints
             self.timepoints = mp_obj.time_setpoints
             assert self.setpoints is not None, "No valid trajectory reference setpoints found"
             self.tol_goal = 0.25
         else:
+            # 默认为四个点循环
             self.setpoints = [[0.0, 0.0, 1.0, 0.0], [0.0, 3.0, 1.25, np.pi/2], [5.0, 3.0, 1.5, np.pi], [5.0, 0.0, 0.25, 1.5*np.pi], [0.0, 0.0, 1.0, 0.0]]
             self.tol_goal = 0.1
 
