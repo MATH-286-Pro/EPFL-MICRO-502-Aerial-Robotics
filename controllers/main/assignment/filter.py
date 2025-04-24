@@ -59,8 +59,11 @@ class AggregatedExtractor:
         return agg
 
     def generate_sectors(self):
-        g = np.deg2rad(35)
-        n = np.deg2rad(25)
+
+        angle = 36
+
+        g = np.deg2rad(angle)
+        n = np.deg2rad(60-angle)
         b = -np.pi - g/2 + g + n
         self.sectors = [(b+i*(g+n), b+i*(g+n)+g) for i in range(5)]
 

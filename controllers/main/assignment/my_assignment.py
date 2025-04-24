@@ -252,6 +252,9 @@ class Class_Drone_Controller:
         self.RACING_PATH         = None
         self.LAST_RACING_COMMAND = None # 上一个巡航命令
 
+        # 起飞状态
+        self.takeoff = False
+
         # 启动函数
         self.update(sensor_data, camera_data)  # 更新数据
         self.Record_Start_Point_command()      # 记录起始位置
@@ -332,7 +335,7 @@ class Class_Drone_Controller:
                 dist = compute_distance(target_pos, drone_pos)   # 计算距离
 
                 # 到达目标点范围
-                if dist <= 0.2:  #00FF00 后续需要调整
+                if dist <= 0.5:  #00FF00 后续需要调整
 
                     # 第一次检测到到达范围
                     self.AT_GATE = True   
@@ -682,35 +685,20 @@ class Class_Drone_Controller:
             drone_pos  = self.Drone_POS_GLOBAL
             dist = np.linalg.norm(target_pos - drone_pos)    # 计算距离
         return dist
-    
-    # 多项式衰减
-    def f_poly(self, x, T, n=4):
-        """
-        多项式型：
-        x>=T    -> 0.5
-        0<=x<T  -> 0.5*(x/T)^n
-        x<0     -> 0
-        n 越大，衰减越陡。
-        """
-        x = np.asarray(x, dtype=float)
-        f = np.zeros_like(x)
-        mask1 = x >= T
-        mask2 = (x >= 0) & (x < T)
-        f[mask1] = 0.5
-        f[mask2] = 0.5 * (x[mask2] / T)**n
-        return f
 
     # 系数衰减
-    def coefficient_drift_in_Y(self):
+    def coefficient_drift_in_Y(self, Dist_Threshold = 1.0, Tensity = 0.8, n = 4):
 
-        # 阈值
-        Dist_Threshold = 1.5 # 距离阈值
+        x = self.compute_distance_drone_to_target()
 
-        # 分段函数
-        if self.compute_distance_drone_to_target() > Dist_Threshold:
-            return 0.5
-        else:
-            return self.f_poly(self.compute_distance_drone_to_target(), Dist_Threshold, n=4) # 多项式衰减函数
+        x = np.asarray(x, dtype=float)
+        f = np.zeros_like(x)
+        mask1 = x >= Dist_Threshold
+        mask2 = (x >= 0) & (x < Dist_Threshold)
+        f[mask1] = Tensity
+        f[mask2] = Tensity * (x[mask2] / Dist_Threshold)**n
+
+        return f # 多项式衰减函数
 
     # 计算方框偏转角度 -> 偏移速度
     def drift_speed_in_Y(self):
@@ -765,9 +753,7 @@ class Class_Drone_Controller:
         direction_target = self.IMAGE_TARGET_VEC_list[4]
 
         POS = self.update_drone_position_global()
-        # POS = POS + direction_target * 1.0 + self.constant_drift_in_Y() * 0.5 # 目标位置 + 偏移量 #FF0000  
-        # POS = POS + direction_target * 1.0 + self.constant_drift_in_Y() * self.coefficient_drift_in_Y() # 目标位置 + 偏移量 #FF0000  
-        POS = POS + direction_target * 1.0 + self.drift_speed_in_Y() * self.coefficient_drift_in_Y() # 目标位置 + 偏移量 #FF0000  
+        POS = POS + direction_target * 1.0 + self.drift_speed_in_Y() * self.coefficient_drift_in_Y(Dist_Threshold=0.8, Tensity=1.0) # 目标位置 + 偏移量 #FF0000  
         YAW = self.YAW_TARGET
 
         command = [POS[X], POS[Y], POS[Z], YAW] # 目标位置 + YAW
@@ -824,13 +810,13 @@ class Class_Drone_Controller:
         return command
     ############################################### 扫描模式 ##############################################
     def Generate_Scan_Sequence(self):
-        T  = 15
+        T  = 18
         dt = 0.01
 
         t_sequence = np.arange(0, T + dt, dt) # 生成时间序列
 
         YAW_shift    = 20 * deg2arc     # 扫描 震荡角度
-        delta_YAW    = 270 * deg2arc    # 扫描 震荡角度
+        delta_YAW    = 360 * deg2arc    # 扫描 震荡角度
         delta_height = 0.0              # 扫描 震荡高度
 
         omega = 2*np.pi/T
@@ -928,11 +914,6 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
 
     Total_Time += dt # 累计时间
 
-    # # 保存数据
-    # if Total_Time > 25.0 and Draw == False:
-    #     save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")          # 保存数据
-    #     Draw = True
-
     # 判断是否第一次运行
     if Drone_Controller is None:
         Drone_Controller = Class_Drone_Controller(sensor_data, camera_data)  # 创建无人机控制器对象
@@ -941,9 +922,11 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
     # 无人机状态更新
     Drone_Controller.update(sensor_data, camera_data) 
 
-    # Take off example
-    if sensor_data['z_global'] < 0.6:
+    # 起飞命令
+    if sensor_data['z_global'] < 1.0 and not Drone_Controller.takeoff:
         control_command = [sensor_data['x_global'], sensor_data['y_global'], 1.0, sensor_data['yaw']]
+        if sensor_data['z_global'] > 0.7:
+            Drone_Controller.takeoff = True
         return control_command
         
     # ---- YOUR CODE HERE ----    
@@ -969,11 +952,12 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
             # 重构 path，将 Gate 5 移植首位作为起点，并且再添加 Gate 5 作为终点
             path_points = []
             path_points.append(points[-1])    # P5
+            path_points.append([1, 4, 1])     # 回到起点
             path_points.extend(points[0:-1])  # P1 -> P4
             path_points.append(points[-1])    # P5
-            path_points.append([1, 4, 1])   # 回到起点
+            path_points.append([1, 4, 1])     # 回到起点
             path_points.extend(points)        # P1 -> P5
-            path_points.append([1, 4, 1])   # 回到起点
+            path_points.append([1, 4, 1])     # 回到起点
 
             # 路径规划
             planner = MotionPlanner3D(obstacles=None, path=path_points)
