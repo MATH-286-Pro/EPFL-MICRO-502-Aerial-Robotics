@@ -962,12 +962,21 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
             save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")
 
             # 数据处理
-            data = AggregatedExtractor(csv_path='target_positions.csv')
-            data.get_aggregated()
+            data = AggregatedExtractor(Drone_Controller.target_pos_list_buffer) # 目标点数据处理
             points = data.convert_to_planning()
 
+            # 根据目标点创建路径点顺序
+            # 重构 path，将 Gate 5 移植首位作为起点，并且再添加 Gate 5 作为终点
+            path_points = []
+            path_points.append(points[-1])    # P5
+            path_points.extend(points[0:-1])  # P1 -> P4
+            path_points.append(points[-1])    # P5
+            path_points.append([1, 4, 1])   # 回到起点
+            path_points.extend(points)        # P1 -> P5
+            path_points.append([1, 4, 1])   # 回到起点
+
             # 路径规划
-            planner = MotionPlanner3D(obstacles=None, points=points)
+            planner = MotionPlanner3D(obstacles=None, path=path_points)
             Drone_Controller.RACING_PATH = planner.trajectory_setpoints
      
     # 探索完毕 #FF0000
