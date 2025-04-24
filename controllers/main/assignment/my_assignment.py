@@ -249,8 +249,11 @@ class Class_Drone_Controller:
 
         # 巡航
         self.RACING_INDEX = 0
-        self.RACING_PATH         = None
-        self.LAST_RACING_COMMAND = None # 上一个巡航命令
+        self.RACING_PATH  = None
+
+        self.timer = None # 基于时间的参数
+        self.racing_path  = None 
+        self.racing_time  = None
 
         # 起飞状态
         self.takeoff = False
@@ -259,7 +262,6 @@ class Class_Drone_Controller:
         self.update(sensor_data, camera_data)  # 更新数据
         self.Record_Start_Point_command()      # 记录起始位置
         self.Generate_Scan_Sequence()          # 生成扫描偏移序列
-        self.LAST_RACING_COMMAND = self.stay() # 初始化巡航命令
 
     ########################################## 更新函数 ##########################################
 
@@ -850,8 +852,8 @@ class Class_Drone_Controller:
 
         return command
 
-    ############################################### 巡航模式 ##############################################
-    def get_Racing_command(self):
+    ############################################### 基于位置的 巡航模式 ##############################################
+    def get_Racing_command_POS_BASED(self):
         
         
         # 如果在 index 内
@@ -890,7 +892,47 @@ class Class_Drone_Controller:
         return command
 
 
+    #  ############################################### 基于时间的 巡航模式 ##############################################
+    def get_Racing_command_TIME_BASED(self, dt):
 
+        # 初始化
+        if self.timer is None:
+            self.timer = 0.0
+            self.index_current_setpoint = 0
+
+        # 初始化后
+        if self.timer is not None:
+            
+            # 计算目标位置
+            # path_points 索引没用完
+            try:
+                # Update new setpoint
+                if self.timer >= self.racing_time[self.index_current_setpoint]:
+                    self.index_current_setpoint += 1
+                current_setpoint = self.racing_path[self.index_current_setpoint,:]
+            
+            # path_points 索引用完了
+            except IndexError:
+                current_setpoint = self.racing_path[-1]
+
+
+            # 计算 目标YAW
+            try: 
+                pos1 = self.RACING_PATH[self.index_current_setpoint]
+                pos2 = self.RACING_PATH[self.index_current_setpoint + 1]
+
+                yaw = np.arctan2(pos2[1] - pos1[1], pos2[0] - pos1[0]) # 计算 YAW 角度
+
+                current_setpoint[3] = yaw # 目标位置 + YAW
+
+            except IndexError:
+                yaw = self.sensor_data['yaw'] # 当前 YAW 角度
+                current_setpoint[3] = yaw              # 目标位置 + YAW
+            
+            # 更新路径时间
+            self.timer += dt
+                    
+        return current_setpoint.tolist() # 转换为列表
 
 
 
@@ -929,8 +971,6 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
             Drone_Controller.takeoff = True
         return control_command
         
-    # ---- YOUR CODE HERE ----    
-
     # 在探索中 #FF0000
     if Explore_State == 0: # 探索状态
         control_command = Drone_Controller.get_IMG_command()
@@ -951,7 +991,8 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
             # 根据目标点创建路径点顺序
             # 重构 path，将 Gate 5 移植首位作为起点，并且再添加 Gate 5 作为终点
             path_points = []
-            path_points.append(points[-1])    # P5
+            path_points.append(Drone_Controller.Drone_POS_GLOBAL.tolist()) # 当前位置
+            # path_points.append(points[-1])    # P5
             path_points.append([1, 4, 1])     # 回到起点
             path_points.extend(points[0:-1])  # P1 -> P4
             path_points.append(points[-1])    # P5
@@ -959,13 +1000,26 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
             path_points.extend(points)        # P1 -> P5
             path_points.append([1, 4, 1])     # 回到起点
 
-            # 路径规划
+            # 基于位置的路径规划
             planner = MotionPlanner3D(obstacles=None, path=path_points)
             Drone_Controller.RACING_PATH = planner.trajectory_setpoints
+
+            # 测试基于的时间路径
+            Drone_Controller.racing_path = planner.trajectory_setpoints
+            Drone_Controller.racing_time = planner.time_setpoints
+
+
      
     # 探索完毕 #FF0000
     elif Explore_State == 1: # 探索完毕
-        control_command = Drone_Controller.get_Racing_command() # 路径规划命令
+        control_command = Drone_Controller.get_Racing_command_POS_BASED() # 路径规划命令
+        # control_command = Drone_Controller.get_Racing_command_TIME_BASED(dt) # 路径规划命令
 
 
     return control_command 
+
+
+
+
+
+
