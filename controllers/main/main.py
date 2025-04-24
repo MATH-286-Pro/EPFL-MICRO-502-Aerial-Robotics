@@ -16,7 +16,7 @@ import threading
 import cv2 #00FF00 添加测试
 import matplotlib.pyplot as plt
 
-exp_num = 4                        # 0: Coordinate Transformation, 1: PID Tuning, 2: Kalman Filter, 3: Motion Planning, 4: Project
+exp_num = 3                        # 0: Coordinate Transformation, 1: PID Tuning, 2: Kalman Filter, 3: Motion Planning, 4: Project
 control_style = 'path_planner'     # 'keyboard' or 'path_planner'
 rand_env = True                    # Randomise the environment
 
