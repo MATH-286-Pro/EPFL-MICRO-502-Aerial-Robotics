@@ -982,7 +982,7 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
             Explore_State = 1
 
             # 保存数据
-            save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")
+            # save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")
 
             # 数据处理
             data = AggregatedExtractor(Drone_Controller.target_pos_list_buffer) # 目标点数据处理
