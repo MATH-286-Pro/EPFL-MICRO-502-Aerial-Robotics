@@ -7,21 +7,6 @@ class MotionPlanner3D():
     
     #Question: SIMON PID, what is vel_max set for PID? Check should be same here
     def __init__(self, obstacles, path, DEBUG = False):
-        # Inputs:
-        # - start: The sequence of input path waypoints provided by the path-planner, including the start and final goal position: Vector of m waypoints, consisting of a tuple with three reference positions each as provided by AStar 
-        # - obstacles: 2D array with obstacle locations and obstacle widths [x, y, z, dx, dy, dz]*n_obs
-        # - bounds: The bounds of the environment [x_min, x_max, y_min, y_max, z_min, z_max]
-        # - grid_size: The grid size of the environment (scalar)
-        # - goal: The final goal position of the drone (tuple of 3) 
-        
-
-        # 使用案例：
-        #   start = (0.0, 0.0, 0.5)
-        #   goal  = (5, 1, 1)
-
-        ## DO NOT MODIFY --------------------------------------------------------------------------------------- ##
-        # self.ast = AStar3D(start, goal, grid_size, obstacles, bounds)
-
 
         self.path = path
 
@@ -83,13 +68,6 @@ class MotionPlanner3D():
 
     def compute_poly_coefficients(self, path_waypoints):
         
-        # Computes a minimum jerk trajectory given time and position waypoints.
-        # Inputs:
-        # - path_waypoints: The sequence of input path waypoints provided by the path-planner, including the start and final goal position: Vector of m waypoints, consisting of a tuple with three reference positions each as provided by AStar
-        # Outputs:
-        # - poly_coeffs: The polynomial coefficients for each segment of the path [6(m-1) x 3]
-
-        # Use the following variables and the class function self.compute_poly_matrix(t) to solve for the polynomial coefficients
         
         seg_times = np.diff(self.times) # The time taken to complete each path segment
         m = len(path_waypoints)         # Number of path waypoints (including start and end)
@@ -212,11 +190,6 @@ class MotionPlanner3D():
         vel_mean = np.mean(np.sqrt(v_x_vals**2 + v_y_vals**2 + v_z_vals**2))
         acc_max = np.max(np.sqrt(a_x_vals**2 + a_y_vals**2 + a_z_vals**2))
         acc_mean = np.mean(np.sqrt(a_x_vals**2 + a_y_vals**2 + a_z_vals**2))
-
-        # print("Maximum flight speed: " + str(vel_max))
-        # print("Average flight speed: " + str(vel_mean))
-        # print("Average flight acceleration: " + str(acc_mean))
-        # print("Maximum flight acceleration: " + str(acc_max))
         
         # Check that it is less than an upper limit velocity v_lim
         assert vel_max <= self.vel_lim, "The drone velocity exceeds the limit velocity : " + str(vel_max) + " m/s"
