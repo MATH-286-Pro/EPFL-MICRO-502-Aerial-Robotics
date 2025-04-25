@@ -755,7 +755,7 @@ class Class_Drone_Controller:
         direction_target = self.IMAGE_TARGET_VEC_list[4]
 
         POS = self.update_drone_position_global()
-        POS = POS + direction_target * 1.0 + self.drift_speed_in_Y() * self.coefficient_drift_in_Y(Dist_Threshold=0.8, Tensity=1.0) # 目标位置 + 偏移量 #FF0000  
+        POS = POS + direction_target * 1.0 + self.drift_speed_in_Y() * self.coefficient_drift_in_Y(Dist_Threshold=1.0, Tensity=0.8) # 目标位置 + 偏移量 #FF0000  
         YAW = self.YAW_TARGET
 
         command = [POS[X], POS[Y], POS[Z], YAW] # 目标位置 + YAW
@@ -886,7 +886,7 @@ class Class_Drone_Controller:
         Target_Pos  = command[0:3]
         distance = compute_distance(Current_Pos, Target_Pos) # 计算距离
 
-        if distance < 1.0: # 到达目标点范围
+        if distance < 1.5: # 到达目标点范围
             self.RACING_INDEX += 1
 
         return command
@@ -982,11 +982,13 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
             Explore_State = 1
 
             # 保存数据
-            # save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")
+            save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")
 
             # 数据处理
             data = AggregatedExtractor(Drone_Controller.target_pos_list_buffer) # 目标点数据处理
-            points = data.convert_to_planning()
+            # points = data.convert_to_planning()
+            # points = data.convert_to_planning_shift(0.2)                  # 使用偏移数据竞速
+            points = data.convert_to_planning_shift_time_customized(0.2)  # 使用偏移数据竞速
 
             # 根据目标点创建路径点顺序
             # 重构 path，将 Gate 5 移植首位作为起点，并且再添加 Gate 5 作为终点
@@ -998,6 +1000,8 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
             path_points.append(points[-1])    # P5
             path_points.append([1, 4, 1])     # 回到起点
             path_points.extend(points)        # P1 -> P5
+            path_points.append([1, 4, 1])     # 回到起点
+            path_points.extend(points)        # P1 -> P5 # 添加第三圈防止出事
             path_points.append([1, 4, 1])     # 回到起点
 
             # 基于位置的路径规划
