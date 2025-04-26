@@ -1,0 +1,8 @@
+{
+    "python.autoComplete.extraPaths": [ 
+        "C:\\Program Files\\Webots\\lib\\controller\\python"
+    ],
+    "python.analysis.extraPaths": [
+        "C:\\Program Files\\Webots\\lib\\controlle\\python"
+    ],
+}

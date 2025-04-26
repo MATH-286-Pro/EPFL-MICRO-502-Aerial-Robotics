@@ -1,4 +1,3 @@
-from lib.a_star_3D import AStar3D
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -7,19 +6,11 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 class MotionPlanner3D():
     
     #Question: SIMON PID, what is vel_max set for PID? Check should be same here
-    def __init__(self, start, obstacles, bounds, grid_size, goal):
-        # Inputs:
-        # - start: The sequence of input path waypoints provided by the path-planner, including the start and final goal position: Vector of m waypoints, consisting of a tuple with three reference positions each as provided by AStar 
-        # - obstacles: 2D array with obstacle locations and obstacle widths [x, y, z, dx, dy, dz]*n_obs
-        # - bounds: The bounds of the environment [x_min, x_max, y_min, y_max, z_min, z_max]
-        # - grid_size: The grid size of the environment (scalar)
-        # - goal: The final goal position of the drone (tuple of 3) 
-        
-        ## DO NOT MODIFY --------------------------------------------------------------------------------------- ##
-        self.ast = AStar3D(start, goal, grid_size, obstacles, bounds)
-        self.path = self.ast.find_path()
+    def __init__(self, obstacles, path, DEBUG = False):
 
-        self.path = ... # 需要重新设置
+        self.path = path
+
+        self.DEBUG = DEBUG
 
         self.trajectory_setpoints = None
 
@@ -45,10 +36,11 @@ class MotionPlanner3D():
         # - path_waypoints: The sequence of input path waypoints provided by the path-planner, including the start and final goal position: Vector of m waypoints, consisting of a tuple with three reference positions each as provided by AStar
 
         # TUNE THE FOLLOWING PARAMETERS (PART 2) ----------------------------------------------------------------- ##
-        self.disc_steps = 20 #Integer number steps to divide every path segment into to provide the reference positions for PID control # IDEAL: Between 10 and 20
-        self.vel_lim = 7.0 #Velocity limit of the drone (m/s)
-        self.acc_lim = 50.0 #Acceleration limit of the drone (m/s²)
-        t_f = 2.8  # Final time at the end of the path (s)
+        #00FF00
+        self.disc_steps = 20    # Integer number steps to divide every path segment into to provide the reference positions for PID control # IDEAL: Between 10 and 20
+        self.vel_lim    = 7.0   # Velocity limit of the drone (m/s)
+        self.acc_lim    = 50.0  # Acceleration limit of the drone (m/s²)
+        t_f             = 30    # Final time at the end of the path (s)
 
         # Determine the number of segments of the path
         self.times = np.linspace(0, t_f, len(path_waypoints)) # The time vector at each path waypoint to traverse (Vector of size m) (must be 0 at start)
@@ -76,13 +68,6 @@ class MotionPlanner3D():
 
     def compute_poly_coefficients(self, path_waypoints):
         
-        # Computes a minimum jerk trajectory given time and position waypoints.
-        # Inputs:
-        # - path_waypoints: The sequence of input path waypoints provided by the path-planner, including the start and final goal position: Vector of m waypoints, consisting of a tuple with three reference positions each as provided by AStar
-        # Outputs:
-        # - poly_coeffs: The polynomial coefficients for each segment of the path [6(m-1) x 3]
-
-        # Use the following variables and the class function self.compute_poly_matrix(t) to solve for the polynomial coefficients
         
         seg_times = np.diff(self.times) # The time taken to complete each path segment
         m = len(path_waypoints)         # Number of path waypoints (including start and end)
@@ -197,18 +182,14 @@ class MotionPlanner3D():
         yaw_vals = np.zeros((self.disc_steps*len(self.times),1))
         trajectory_setpoints = np.hstack((x_vals, y_vals, z_vals, yaw_vals))
 
-        self.plot(obs, path_waypoints, trajectory_setpoints)
+        if self.DEBUG:
+            self.plot(obs, path_waypoints, trajectory_setpoints)
             
         # Find the maximum absolute velocity during the segment
         vel_max = np.max(np.sqrt(v_x_vals**2 + v_y_vals**2 + v_z_vals**2))
         vel_mean = np.mean(np.sqrt(v_x_vals**2 + v_y_vals**2 + v_z_vals**2))
         acc_max = np.max(np.sqrt(a_x_vals**2 + a_y_vals**2 + a_z_vals**2))
         acc_mean = np.mean(np.sqrt(a_x_vals**2 + a_y_vals**2 + a_z_vals**2))
-
-        print("Maximum flight speed: " + str(vel_max))
-        print("Average flight speed: " + str(vel_mean))
-        print("Average flight acceleration: " + str(acc_mean))
-        print("Maximum flight acceleration: " + str(acc_max))
         
         # Check that it is less than an upper limit velocity v_lim
         assert vel_max <= self.vel_lim, "The drone velocity exceeds the limit velocity : " + str(vel_max) + " m/s"
@@ -235,13 +216,14 @@ class MotionPlanner3D():
         fig = plt.figure(figsize=(8, 6))
         ax = fig.add_subplot(111, projection='3d')
 
-        for ob in obs:
-            self.plot_obstacle(ax, ob[0], ob[1], ob[2], ob[3], ob[4], ob[5])
+        if obs is not None:
+            for ob in obs:
+                self.plot_obstacle(ax, ob[0], ob[1], ob[2], ob[3], ob[4], ob[5])
 
         ax.plot(trajectory_setpoints[:,0], trajectory_setpoints[:,1], trajectory_setpoints[:,2], label="Minimum-Jerk Trajectory", linewidth=2)
-        ax.set_xlim(0, 5)
-        ax.set_ylim(0, 3)
-        ax.set_zlim(0, 1.5)
+        ax.set_xlim(0, 8)
+        ax.set_ylim(0, 8)
+        ax.set_zlim(0, 4)
 
         # Plot waypoints
         waypoints_x = [p[0] for p in path_waypoints]
@@ -255,5 +237,9 @@ class MotionPlanner3D():
         ax.set_zlabel("Z Position")
         ax.set_title("3D Motion planning trajectories")
         ax.legend()
+
+        # 俯视图：elev=90（俯视），azim= -90(调整朝向，可根据需要改成0、180等)
+        ax.view_init(elev=90, azim=-90)
+
         plt.show()
 

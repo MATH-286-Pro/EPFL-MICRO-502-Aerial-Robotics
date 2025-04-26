@@ -3,20 +3,22 @@ import sys
 print("You are using python at this location:", sys.executable)
 
 import numpy as np
-from controller import Supervisor, Keyboard
+from controller import Supervisor, Keyboard  
 from exercises.ex1_pid_control import quadrotor_controller
 from exercises.ex2_kalman_filter import kalman_filter as KF
 from exercises.ex3_motion_planner import MotionPlanner3D as MP
-import assignment.my_assignment as assignment
+import assignment.my_assignment as assignment    #00FF00 使用自定义代码
 import exercises.ex0_rotations as ex0_rotations
 from scipy.spatial.transform import Rotation as R
 import lib.mapping_and_planning_examples as mapping_and_planning_examples
 import time, random
 import threading
+import cv2 #00FF00 添加测试
+import matplotlib.pyplot as plt
 
-exp_num = 4                    # 0: Coordinate Transformation, 1: PID Tuning, 2: Kalman Filter, 3: Motion Planning, 4: Project
-control_style = 'path_planner'      # 'keyboard' or 'path_planner'
-rand_env = False                # Randomise the environment
+exp_num = 4                        # 0: Coordinate Transformation, 1: PID Tuning, 2: Kalman Filter, 3: Motion Planning, 4: Project
+control_style = 'path_planner'     # 'keyboard' or 'path_planner'
+rand_env = True                   # Randomise the environment
 
 # Global variables for handling threads
 latest_sensor_data = None
@@ -118,8 +120,9 @@ class CrazyflieInDroneDome(Supervisor):
 
         # Handle global setpoints to system depending on exercise
         if exp_num == 3:
+            # 路径规划模式
             start = (0.0, 0.0, 0.5)
-            goal = (5, 1, 1)
+            goal  = (5, 1, 1)
             grid_size = 0.25
             obstacles = [(0.75, 0.25, 0.0, 0.4, 0.4, 1.5),
                         (1.25, 1.625, 0.0, 0.4, 0.4, 1.5),
@@ -132,12 +135,13 @@ class CrazyflieInDroneDome(Supervisor):
                         (2.5, 2.75, 0.125, 0.5, 0.25, 0.875)
                         ]  # (x, y, z, width_x, width_y, width_z)
             bounds = (0, 5, 0, 3, 0, 1.5)  # (x_min, x_max, y_min, y_max, z_min, z_max)
-            mp_obj = MP(start, obstacles, bounds, grid_size, goal)
-            self.setpoints = mp_obj.trajectory_setpoints
+            mp_obj = MP(start, obstacles, bounds, grid_size, goal) #00FF00 使用路径规划
+            self.setpoints  = mp_obj.trajectory_setpoints
             self.timepoints = mp_obj.time_setpoints
             assert self.setpoints is not None, "No valid trajectory reference setpoints found"
             self.tol_goal = 0.25
         else:
+            # 默认为四个点循环
             self.setpoints = [[0.0, 0.0, 1.0, 0.0], [0.0, 3.0, 1.25, np.pi/2], [5.0, 3.0, 1.5, np.pi], [5.0, 0.0, 0.25, 1.5*np.pi], [0.0, 0.0, 1.0, 0.0]]
             self.tol_goal = 0.1
 
@@ -323,9 +327,11 @@ class CrazyflieInDroneDome(Supervisor):
             # Print the current progress
             if drone.segment > 1:
                 if drone.gate_progress[drone.lap][drone.segment-2]:
-                    print('Moving to the next segment after successfully passing gate', drone.segment-2)
+                    pass
+                    # print('Moving to the next segment after successfully passing gate', drone.segment-2)
                 else:
-                    print('Moving to the next segment after failing to pass gate', drone.segment-2)
+                    pass
+                    # print('Moving to the next segment after failing to pass gate', drone.segment-2)
 
         # Check if the drone has reached the gate in this segment
         if drone.segment != -1:
@@ -532,7 +538,7 @@ class CrazyflieInDroneDome(Supervisor):
 
         return data
 
-    # Read the camera feed
+    # Read the camera feed 读取相机数据 #0000FF
     def read_camera(self):
 
         # Read the camera image in BRGA format
@@ -623,9 +629,9 @@ class CrazyflieInDroneDome(Supervisor):
         # Update drone states in simulation
         super().step(self.timestep)
 
-# A thread that runs the path planner in parallel with the simulation
+# A thread that runs the path planner in parallel with the simulation 路径规划线程 #0000FF
 def path_planner_thread(drone):
-    global latest_sensor_data, latest_camera_data, current_setpoint, running
+    global latest_sensor_data, latest_camera_data, current_setpoint, running #00FF00 全局变量
 
     # Set the initial last planner time
     last_planner_time = drone.getTime()
@@ -655,7 +661,7 @@ def path_planner_thread(drone):
             dt_planner = current_time - last_planner_time
             last_planner_time = current_time
 
-            new_setpoint = assignment.get_command(sensor_data_copy, camera_data_copy, dt_planner)
+            new_setpoint = assignment.get_command(sensor_data_copy, camera_data_copy, dt_planner) #00FF00 使用自定义代码位置
             
             with setpoint_lock:
                 current_setpoint = new_setpoint
@@ -663,6 +669,12 @@ def path_planner_thread(drone):
         time.sleep(0.01)
     
 
+
+
+
+
+
+# 主函数
 if __name__ == '__main__':
 
     # Initialize the drone
@@ -672,7 +684,7 @@ if __name__ == '__main__':
 
     # Start the path planner thread
     if control_style == 'path_planner' and exp_num == 4:
-        planner_thread = threading.Thread(target=path_planner_thread, args=(drone,))
+        planner_thread = threading.Thread(target=path_planner_thread, args=(drone,));    #00FF00 这里就运行了一次，是多线程任务
         planner_thread.daemon = True
         planner_thread.start()
    
@@ -698,11 +710,18 @@ if __name__ == '__main__':
                     
                     # Rotate the control commands from the body reference frame to the inertial reference frame
                     euler_angles = [sensor_data['roll'], sensor_data['pitch'], sensor_data['yaw']]
-                    quaternion = [sensor_data['q_x'], sensor_data['q_y'], sensor_data['q_z'], sensor_data['q_w']]
+                    quaternion   = [sensor_data['q_x'], sensor_data['q_y'], sensor_data['q_z'], sensor_data['q_w']]
                     control_commands = ex0_rotations.rot_body2inertial(control_commands, euler_angles, quaternion)
 
                     # Call the PID controller to get the motor commands
-                    motorPower = drone.PID_CF.keys_to_pwm(drone.dt_ctrl, control_commands, sensor_data)    
+                    motorPower = drone.PID_CF.keys_to_pwm(drone.dt_ctrl, control_commands, sensor_data)
+                    
+                    camera_data = drone.read_camera()
+
+                    #00FF00 类更新
+                    # Drone_Controller.update(sensor_data, camera_data) 
+                    # Drone_Controller.Compute_Target_With_Buffer()
+
 
                 elif control_style == 'path_planner':
                     # # Update the setpoint
@@ -720,13 +739,15 @@ if __name__ == '__main__':
 
                     else:
 
-                        # Read the camera feed
+                        # Read the camera feed 读取相机数据
                         camera_data = drone.read_camera()
-                        
+
+
+
                         # Update the sensor data in the thread
                         with sensor_lock:
-                            latest_sensor_data = sensor_data
-                            latest_camera_data = camera_data
+                            latest_sensor_data = sensor_data #00FF00 全局变量 传感器
+                            latest_camera_data = camera_data #00FF00 全局变量 相机
 
                         # Call the PID controller to get the motor commands
                         motorPower = drone.PID_CF.setpoint_to_pwm(drone.dt_ctrl, current_setpoint, latest_sensor_data)
@@ -743,6 +764,11 @@ if __name__ == '__main__':
                 # Update the PID control time
                 drone.dt_ctrl = drone.getTime() - drone.PID_update_last_time # Time interval for PID control - Is refactored above for KF - why done twice?
                 drone.PID_update_last_time = drone.getTime()
+
+            # # 测试 #00FF00
+            # if Drone_Controller.target_pos_list_buffer:
+            #     assignment.plot_3D_rect(Drone_Controller.target_pos_list_buffer[-1])
+            #     print(Drone_Controller.target_pos_list_buffer[-1])
 
             # Update the drone status in simulation
             drone.step(motorPower, sensor_data)
