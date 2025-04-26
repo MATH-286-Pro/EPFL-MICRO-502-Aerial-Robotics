@@ -4,40 +4,12 @@ Exercises and the major software project using a Crazyflie implemented in Webots
 **Documentation:** https://micro-502.readthedocs.io
 
 
+
+https://github.com/user-attachments/assets/74ce3f74-0939-41c1-b5f0-324baa804558
+
+
 ## 说明
 - 在 `main.py` 开头修改使用键盘还是自动路径
 - 在 `my_assignment.py` 中编写控制代码
 
-
-## 键盘控制命令
-```python
-if key == ord('W'):
-    forward_velocity = 2.0
-elif key == ord('S'):
-    forward_velocity = -2.0
-elif key == ord('A'):
-    left_velocity = 2.0 
-elif key == ord('D'):
-    left_velocity = -2.0
-elif key == ord('Q'):
-    yaw_rate = 1.0
-elif key == ord('E'):
-    yaw_rate = -1.0
-elif key == ord('X'):
-    altitude_velocity = 0.3
-elif key == ord('Z'):
-    altitude_velocity = -0.3
-key = self.keyboard.getKey()
-```
-
-# 第一圈 方案设定
-
-1. 视觉向量跟随
-
-2. 视觉定位跟随
-
-
-
-存在问题：
-    靠近目标时 视觉定位非常糟糕
 
