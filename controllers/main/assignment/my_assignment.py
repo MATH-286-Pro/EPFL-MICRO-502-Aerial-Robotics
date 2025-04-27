@@ -63,11 +63,13 @@ class Class_Drone_Controller:
         self.RACING_EXPLORE      = 0     
         self.RACING_POINT_INDEX  = [] # 记录索引，用于记录 某个Gate 起始 index
 
-        # 第一圈标志为
-        self.first_lap_start  = True
-        self.first_lap_finish = False
-        self.first_lap_path   = None
-        self.first_lap_index  = None
+        # 
+        self.lap_start  = False
+        self.lap_finish = False
+        self.lap_index  = 0
+        self.lap_path   = None
+        self.lap_time   = None
+        self.timer      = 0
 
         # 巡航
         self.RACING_INDEX = 0
@@ -454,7 +456,7 @@ class Class_Drone_Controller:
 
                 self.check_target_switch() # 检测目标切换
 
-    ############################################# 计算目标 YAW #############################################
+    ############################################### 计算目标 YAW #############################################
     def Compute_YAW_TARGET(self):
         if self.IMAGE_TARGET_VEC_list is not None:
             Vector_3D = self.IMAGE_TARGET_VEC_list[4]
@@ -481,56 +483,100 @@ class Class_Drone_Controller:
             self.YAW_NORMAL = normal_angle 
             self.Drone_YAW_NORMAL_VEC = normal_vector
 
-    ############################################ 寻线导航 ############################################
-    def get_pathfollow_command(self):
+    ############################################### 寻线导航 ############################################
+    def path_command_init(self, path, time = None):
+        self.lap_start  = False
+        self.lap_finish = False
+        self.lap_index  = 0
+        self.lap_path   = path
+        self.lap_time   = time
+        self.timer      = 0
+    
+    def get_path_command(self, mode = "position", dt = None):
 
-        
-        if self.first_lap_start == True:
-            path = [[1, 4, 1],
-                    [1, 1, 1],
-                    [7, 1, 1],
-                    [7, 7, 1],
-                    [1, 7, 1],
-                    [1, 4, 1]]
-            
-            planner              = MotionPlanner3D(obstacles=None, path=path)
-            self.first_lap_path       = planner.trajectory_setpoints
-            self.first_lap_start  = False
-            self.first_lap_index = 0
-        
-        if self.first_lap_path is not None:
-            
+        if self.lap_start == False:
+            self.lap_start = True
+            self.lap_index = 0
+            self.lap_finish = False
+
+        # 基于位置
+        if mode == "position":
             try:
-                command = self.first_lap_path[self.first_lap_index]
+                command = self.lap_path[self.lap_index]
 
                 try:
-                    pos1 = self.first_lap_path[self.first_lap_index]
-                    pos2 = self.first_lap_path[self.first_lap_index+1]
+                    pos1 = self.lap_path[self.lap_index]
+                    pos2 = self.lap_path[self.lap_index+1]
                     yaw  = np.arctan2(pos2[1] - pos1[1], pos2[0] - pos1[0])
-                    yaw = yaw + np.deg2rad(25)
                     command[3] = yaw
                 except IndexError:
                     yaw = self.sensor_data["yaw"]
                     command[3] = yaw
             except IndexError:
                 command = self.stay()
-
+            
             current_pos = self.Drone_POS_GLOBAL
             target_pos  = command[0:3]
             distance = compute_distance(current_pos, target_pos)
 
             if distance < 1.5:
-                self.first_lap_index += 1
-                if self.first_lap_index == len(self.first_lap_path):
-                    self.first_lap_finish = True
+                self.lap_index += 1
+                if self.lap_index == len(self.lap_path):
+                    self.lap_start  = False
+                    self.lap_finish = True
+                    self.lap_index  = 0
+            
+            return command.tolist()
+        
+        # 基于时间
+        elif mode == "time":
+            # self.lap+path 索引没用完
+            try:
+                if self.timer >= self.lap_time[self.lap_index]:
+                    self.lap_index += 1
+                command = self.lap_path[self.lap_index]
+            
+            except IndexError:
+                command = self.lap_path[-1]
+                self.lap_start  = False
+                self.lap_finish = True
+            
+            try:
+                pos1 = self.lap_path[self.lap_index]
+                pos2 = self.lap_path[self.lap_index+1]
+                yaw  = np.arctan2(pos2[1] - pos1[1], pos2[0] - pos1[0])
+                command[3] = yaw
+            except IndexError:
+                yaw = self.sensor_data["yaw"]
+                command[3] = yaw
+            
+            self.timer += dt
 
-            return command
+            return command.tolist()
+        
+        else:
+            raise ValueError("Invalid mode. Use 'position' or 'time'.")
 
 
 
+    def get_pathfollow_command(self, path,  dt_ = None):
+
+        if self.lap_start == False:
+
+            # 路径与时间生成
+            planner = MotionPlanner3D(obstacles = None, 
+                                      time = 10, 
+                                      path=path)
+            self.path_command_init(path = planner.trajectory_setpoints,
+                                   time = planner.time_setpoints)
+            self.lap_start = True
+
+        if self.lap_start == True:
+            return self.get_path_command(mode = "time", dt = dt_) # 基于位置的路径跟随
 
 
-    ############################################ 视觉导航 ##############################################
+
+    ############################################### 视觉导航 ##############################################
 
     # 常数偏移
     def constant_drift_in_Y(self):
@@ -758,11 +804,11 @@ class Class_Drone_Controller:
         return command
 
 
-    #  ############################################### 基于时间的 巡航模式 ##############################################
+    #  ############################################ 基于时间的 巡航模式 ##############################################
     def get_Racing_command_TIME_BASED(self, dt):
 
         # 初始化
-        if self.timer is None:
+        if self.lap_start == False:
             self.timer = 0.0
             self.index_current_setpoint = 0
 
@@ -821,8 +867,12 @@ class Class_Drone_Controller:
     def return_path_order_xunhang(self,gate_points):
 
         path_points = []
-        path_points.append(self.Drone_POS_GLOBAL.tolist()) # 当前位置
-        path_points.append([4.5,4,1])     # 绕过中心点
+
+        path_points.append([2,6,1])       # 绕过中心点
+        path_points.append([6,4,1])       # 绕过中心点
+        path_points.append([2,2,1])       # 绕过中心点
+
+
         path_points.extend(gate_points)
         path_points.append([1, 4, 1])     # 回到起点
 
@@ -868,11 +918,17 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
     # 在探索中 #FF0000
     if Explore_State == 0: # 探索状态
         # control_command = Drone_Controller.get_IMG_command()
-        # control_command = Drone_Controller.get_mix_command()
-        control_command = Drone_Controller.get_pathfollow_command()
+        # 路径点
+        path = [[1, 4, 1],
+                [1, 1, 1],
+                [7, 1, 1],
+                [7, 7, 1],
+                [1, 7, 1],
+                [2, 6, 1]]
+        control_command = Drone_Controller.get_pathfollow_command(path, dt)
 
         # 探索完毕标志位
-        if Drone_Controller.AT_GATE and Drone_Controller.RACING_EXPLORE == 5 or Total_Time > 25.0 or Drone_Controller.first_lap_finish:
+        if Drone_Controller.lap_finish == True:
 
             # 修改标志位
             Explore_State = 1
@@ -883,32 +939,18 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
             # 数据处理
             data        = AggregatedExtractor(Drone_Controller.target_pos_list_buffer) # 目标点数据处理
             # gate_points = data.convert_to_planning()
-            gate_points = data.convert_to_planning_shift(0.2)                  # 使用偏移数据竞速
-            # gate_points = data.convert_to_planning_shift_time_customized(0.2)  # 使用偏移数据竞速
+            # gate_points = data.convert_to_planning_shift(0.2)                  # 使用偏移数据竞速
+            gate_points = data.convert_to_planning_shift_time_customized(0.2)  # 使用偏移数据竞速
 
-            # # 根据目标点创建路径点顺序
-            # # 重构 path，将 Gate 5 移植首位作为起点，并且再添加 Gate 5 作为终点
-            # path_points = []
-            # path_points.append(Drone_Controller.Drone_POS_GLOBAL.tolist()) # 当前位置
-            # path_points.append([1, 4, 1])     # 回到起点
-            # path_points.extend(gate_points[0:-1])  # P1 -> P4
-            # path_points.append(gate_points[-1])    # P5
-            # path_points.append([1, 4, 1])     # 回到起点
-            # path_points.extend(gate_points)        # P1 -> P5
-            # path_points.append([1, 4, 1])     # 回到起点
-            # path_points.extend(gate_points)        # P1 -> P5 # 添加第三圈防止出事
-            # path_points.append([1, 4, 1])     # 回到起点
-
-            path_points = Drone_Controller.return_path_order_xunhang(gate_points)
+            path_points = Drone_Controller.return_path_order_xunhang(gate_points)  # 巡航模式 2-3 圈路径
 
             # 基于位置的路径规划
-            planner = MotionPlanner3D(obstacles=None, path=path_points)
+            planner = MotionPlanner3D(obstacles=None, time = None, path=path_points)
             Drone_Controller.RACING_PATH = planner.trajectory_setpoints
 
             # 测试基于的时间路径
             Drone_Controller.racing_path = planner.trajectory_setpoints
             Drone_Controller.racing_time = planner.time_setpoints
-
 
      
     # 探索完毕 #FF0000
