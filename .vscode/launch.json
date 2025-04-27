@@ -12,6 +12,9 @@
             // "program": "${file}",
             "program": "${workspaceFolder}/controllers/main/main.py",
             "console": "integratedTerminal",
+            "env": {
+                "WEBOTS_HOME": "/usr/local/webots"
+              },
             "envFile": "${workspaceFolder}/.env"
         }
     ]

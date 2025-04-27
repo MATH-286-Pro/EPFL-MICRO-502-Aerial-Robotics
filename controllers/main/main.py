@@ -672,10 +672,23 @@ def path_planner_thread(drone):
 
 
 
-
-
 # 主函数
 if __name__ == '__main__':
+
+
+    # 1) 生成或读取 seed
+    seed = int(time.time() * 1000) & 0xFFFFFFFF  # 毫秒级时间戳截断到 32 位
+    # seed = 2023272787
+    # seed = 2024573462
+    # seed = 2025646964
+    # seed = 2027708318
+
+    # 2) 设置随机种子
+    random.seed(seed)
+    np.random.seed(seed)
+    
+    # 3) 打印一下，方便日志里留痕
+    print(seed)
 
     # Initialize the drone
     drone = CrazyflieInDroneDome()
