@@ -2,52 +2,9 @@ import numpy as np
 import time
 import cv2
 
-import pandas as pd
-
-
 from assignment.filter import *
 from assignment.planning import *
-
-# The available ground truth state measurements can be accessed by calling sensor_data[item]. All values of "item" are provided as defined in main.py within the function read_sensors. 
-# The "item" values that you may later retrieve for the hardware project are:
-
-# sensor_data 字典数据内容：
-# "x_global": Global X position
-# "y_global": Global Y position
-# "z_global": Global Z position
-
-# 'v_x": Global X velocity
-# "v_y": Global Y velocity
-# "v_z": Global Z velocity
-
-# "ax_global": Global X acceleration
-# "ay_global": Global Y acceleration
-# "az_global": Global Z acceleration (With gravtiational acceleration subtracted)
-
-# "roll":  Roll angle (rad)
-# "pitch": Pitch angle (rad)
-# "yaw":   Yaw angle (rad)
-
-# "q_x": X Quaternion value
-# "q_y": Y Quaternion value
-# "q_z": Z Quaternion value
-# "q_w": W Quaternion value
-
-# sensor_data 其他暂时用不到的数据
-# "t":
-# "range_front"
-# "range_left"
-# "range_back"
-# "range_right"
-# "range_down"
-# "rate_roll" ...
-
-
-
-# A link to further information on how to access the sensor data 
-# on the Crazyflie hardware for the hardware practical can be found here: 
-# https://www.bitcraze.io/documentation/repository/crazyflie-firmware/master/api/logs/#stateestimate
-
+from assignment.base import *
 
 
 # 宏定义
@@ -61,124 +18,6 @@ Drone_Controller = None
 Total_Time       = 0
 Draw             = False # 是否绘制过轨迹
 Explore_State    = 0     # 0 代表在探索中，1 代表探索完毕
-
-########################################## 自定基础函数 ##########################################
-
-# 向量基础函数
-
-# 向量单位化
-def unit_vector(v):
-    norm = np.linalg.norm(v)
-    if norm == 0:
-        return v  # 返回原始向量
-    else:
-        return v / norm  # 返回单位化向量
-
-# 向量夹角
-def compute_angle(v1, v2):
-    # 计算两个向量的夹角（弧度）
-    cos_theta = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
-    angle = np.arccos(np.clip(cos_theta, -1.0, 1.0))  # 限制在 [-1, 1] 范围内
-    return angle
-
-# 四元数基础函数
-def quat_mutiplication(q1, q2):
-    # 根据 [x, y, z, w] 的公式
-    x = q1[W]*q2[X] + q1[X]*q2[W] + q1[Y]*q2[Z] - q1[Z]*q2[Y]
-    y = q1[W]*q2[Y] - q1[X]*q2[Z] + q1[Y]*q2[W] + q1[Z]*q2[X]
-    z = q1[W]*q2[Z] + q1[X]*q2[Y] - q1[Y]*q2[X] + q1[Z]*q2[W]
-    w = q1[W]*q2[W] - q1[X]*q2[X] - q1[Y]*q2[Y] - q1[Z]*q2[Z]
-    return np.array([x, y, z, w])
-
-def quat_rotate(P1, Q):
-    Q_prim = np.array([-Q[X], -Q[Y], -Q[Z], Q[W]])
-    P2 = quat_mutiplication(quat_mutiplication(Q,P1),Q_prim)
-    return P2
-
-def vector_rotate(p1, Q):
-    P1 = np.array([p1[X], p1[Y], p1[Z], 0]) # 添加 0
-    P2 = quat_rotate(P1, Q)
-    return P2[[X,Y,Z]]     # 返回旋转后的向量部分
-
-
-# 目标中心点基础函数
-def compute_target_center(rect, eps=1e-6):
-
-    # 取出四个点
-    x0, y0 = rect[0]
-    x1, y1 = rect[1]
-    x2, y2 = rect[2]
-    x3, y3 = rect[3]
-
-    # 计算分母
-    denom = (x0 - x2) * (y1 - y3) - (y0 - y2) * (x1 - x3)
-    if abs(denom) < eps:
-        # 分母接近0，说明两直线平行或共线，无法确定交点
-        return None
-
-    # 计算分子中的通项
-    det1 = x0 * y2 - y0 * x2
-    det2 = x1 * y3 - y1 * x3
-
-    # 计算交点坐标
-    x = (det1 * (x1 - x3) - (x0 - x2) * det2) / denom
-    y = (det1 * (y1 - y3) - (y0 - y2) * det2) / denom
-
-    center = np.array([x, y])
-
-    return center
-
-# 四边形重新排序函数
-def SORT(pts):
-    """
-    输入：
-        pts: numpy 数组，形状 (4,2)，每行是一个 (x,y) 坐标
-    返回：
-        按 [左上, 左下, 右下, 右上] 排序后的点，形状 (4,2)
-    """
-    # 1. 按 x 坐标升序，分成左右两组
-    pts_sorted = pts[np.argsort(pts[:, 0])]
-    left  = pts_sorted[:2]   # x 最小的两个
-    right = pts_sorted[2:]   # x 最大的两个
-
-    # 2. 左组按 y 升序：上<下；右组同理
-    left  = left[np.argsort(left[:, 1])]
-    right = right[np.argsort(right[:, 1])]
-
-    tl, bl = left    # top-left, bottom-left
-    tr, br = right   # top-right, bottom-right
-
-    return np.array([tl, bl, br, tr], dtype=pts.dtype)
-
-# 保存数据
-def save_data(target_pos_list_buffer, file_name = "target_positions"):
-    # 创建一个列表，用于存储所有目标点的字典数据
-    rows = []
-
-    for frame_idx, targets in enumerate(target_pos_list_buffer):
-        for point_idx, point in enumerate(targets):
-            rows.append({
-                'frame': frame_idx,
-                'point_index': point_idx,
-                'x': point[0],
-                'y': point[1],
-                'z': point[2]
-            })
-
-    # 将数据转换为 DataFrame
-    df = pd.DataFrame(rows)
-
-    df.to_csv(f'{file_name}.csv', index=False)
-
-    print("保存 CSV 文件成功！")
-
-# 计算2点距离函数
-def compute_distance(P1, P2):
-    return np.linalg.norm(P1 - P2)
-
-########################################## 自定基础函数 ##########################################
-
-
 
 
 # 定义无人机类
@@ -217,11 +56,18 @@ class Class_Drone_Controller:
 
         self.target_pos_list_buffer = [] # 目标点 4+1 列表
         self.target_pos_list_Valid  = [] # 目标点 4+1 列表    [数据处理后]
+        self.target_aro_list_Valid  = [] # 目标法向量         [配合 Valid Pos]
 
         # 路径数据记录
         self.AT_GATE             = False # 是否到达 Gate
         self.RACING_EXPLORE      = 0     
         self.RACING_POINT_INDEX  = [] # 记录索引，用于记录 某个Gate 起始 index
+
+        # 第一圈标志为
+        self.first_lap_start  = True
+        self.first_lap_finish = False
+        self.first_lap_path   = None
+        self.first_lap_index  = None
 
         # 巡航
         self.RACING_INDEX = 0
@@ -257,16 +103,15 @@ class Class_Drone_Controller:
         self.update_drone_position_global()             # 更新无人机坐标
         self.update_camera_position_global()            # 更新相机坐标
         self.update_IMAGE_TO_VEC_LIST(DEBUG = True)     # 相机坐标系下目标位置列表
-
+        #    self.update_IMAGE_TO_POINTS_2D  # 更新相机 2D 坐标位置
 
         # 更新 三角定位 4+1 列表
         self.update_Target_List_with_Buffer()               # 更新目标点列表 [slef.target_pos_list_buffer] 列表数据
         #  self.update_Target_list_Filtered_CallBack()      # 数据滤波
-        #    self.check_target_switch() # 检测目标切换       # 是否切换目标
+        #    self.check_target_switch() # 检测目标切换        # 是否切换目标
 
         # 检测
         self.check_target_AtGate()                       # 检测目标点是否到达
-        # self.check_target_switch()                       # 检测目标切换
         self.check_is_near_gate_Vision(DEBUG = False)
 
 
@@ -317,7 +162,7 @@ class Class_Drone_Controller:
                     # 第一次检测到到达范围
                     self.AT_GATE = True   
 
-                    print("到达目标点范围！")
+                    # print("到达目标点范围！")
 
                     return True
                 
@@ -340,7 +185,7 @@ class Class_Drone_Controller:
             if len(self.target_pos_list_Valid) == 1:
                 self.RACING_EXPLORE += 1
                 self.RACING_POINT_INDEX.append(0) # 记录索引
-                print(self.RACING_EXPLORE-1, "->", self.RACING_EXPLORE, "目标点切换！")  
+                # print(self.RACING_EXPLORE-1, "->", self.RACING_EXPLORE, "目标点切换！")  
 
                 self.AT_GATE = False # 重新开始
 
@@ -355,7 +200,7 @@ class Class_Drone_Controller:
                 if delta >= 2.0: 
                     self.RACING_EXPLORE += 1
                     self.RACING_POINT_INDEX.append(len(self.target_pos_list_Valid) - 1)
-                    print(self.RACING_EXPLORE-1, "->", self.RACING_EXPLORE, "目标点切换！") 
+                    # print(self.RACING_EXPLORE-1, "->", self.RACING_EXPLORE, "目标点切换！") 
 
                     self.AT_GATE = False # 重新开始
 
@@ -471,7 +316,6 @@ class Class_Drone_Controller:
             cv2.imshow("Rectangle Corners", Feature_Frame)
         else:
             cv2.imshow("Rectangle Corners", Feature_Frame)
-
 
 
     # 图像 -> 方向向量列表
@@ -598,12 +442,17 @@ class Class_Drone_Controller:
 
             # 过滤目标点
             if P_Diff <= 0.2:
-                self.target_pos_list_Valid.append(self.target_pos_list_buffer[-1]) # 目标点 4+1 缓存
+                data = self.target_pos_list_buffer[-1]    # 目标点 4+1 缓存 #00FF00
+                p0 = data[0]
+                p3 = data[3]
+                theta  = np.arctan2(p0[Y] - p3[Y], p0[X] - p3[X]) - np.pi / 2
+                vector = np.array([np.cos(theta), np.sin(theta), 0])
+
+                self.target_pos_list_Valid.append(data)    # 更新目标位置
+                self.target_aro_list_Valid.append(vector)  # 更新目标法向量
+
 
                 self.check_target_switch() # 检测目标切换
-
-                #FF0000 测试 打印中心点
-                # print(self.target_pos_list_Valid[-1][4])
 
     ############################################# 计算目标 YAW #############################################
     def Compute_YAW_TARGET(self):
@@ -631,6 +480,55 @@ class Class_Drone_Controller:
 
             self.YAW_NORMAL = normal_angle 
             self.Drone_YAW_NORMAL_VEC = normal_vector
+
+    ############################################ 寻线导航 ############################################
+    def get_pathfollow_command(self):
+
+        
+        if self.first_lap_start == True:
+            path = [[1, 4, 1],
+                    [1, 1, 1],
+                    [7, 1, 1],
+                    [7, 7, 1],
+                    [1, 7, 1],
+                    [1, 4, 1]]
+            
+            planner              = MotionPlanner3D(obstacles=None, path=path)
+            self.first_lap_path       = planner.trajectory_setpoints
+            self.first_lap_start  = False
+            self.first_lap_index = 0
+        
+        if self.first_lap_path is not None:
+            
+            try:
+                command = self.first_lap_path[self.first_lap_index]
+
+                try:
+                    pos1 = self.first_lap_path[self.first_lap_index]
+                    pos2 = self.first_lap_path[self.first_lap_index+1]
+                    yaw  = np.arctan2(pos2[1] - pos1[1], pos2[0] - pos1[0])
+                    yaw = yaw + np.deg2rad(25)
+                    command[3] = yaw
+                except IndexError:
+                    yaw = self.sensor_data["yaw"]
+                    command[3] = yaw
+            except IndexError:
+                command = self.stay()
+
+            current_pos = self.Drone_POS_GLOBAL
+            target_pos  = command[0:3]
+            distance = compute_distance(current_pos, target_pos)
+
+            if distance < 1.5:
+                self.first_lap_index += 1
+                if self.first_lap_index == len(self.first_lap_path):
+                    self.first_lap_finish = True
+
+            return command
+
+
+
+
 
     ############################################ 视觉导航 ##############################################
 
@@ -718,7 +616,7 @@ class Class_Drone_Controller:
         direction_target = self.IMAGE_TARGET_VEC_list[4]
 
         POS = self.update_drone_position_global()
-        POS = POS + direction_target * 1.0 + self.drift_speed_in_Y() * self.coefficient_drift_in_Y(Dist_Threshold=1.0, Tensity=0.8) # 目标位置 + 偏移量 #FF0000  
+        POS = POS + direction_target * 1.0 + self.drift_speed_in_Y() * self.coefficient_drift_in_Y(Dist_Threshold=1.0, Tensity=0.7) # 目标位置 + 偏移量 #FF0000  
         YAW = self.YAW_TARGET
 
         command = [POS[X], POS[Y], POS[Z], YAW] # 目标位置 + YAW
@@ -761,7 +659,7 @@ class Class_Drone_Controller:
         command = self.get_triangulate_command()
         
         # 如果到达目标点
-        if self.check_target_AtGate():
+        if not self.check_target_AtGate():
             # 到达目标点，使用视觉命令
             command = self.get_IMG_command()
             sign = "视觉"
@@ -775,7 +673,8 @@ class Class_Drone_Controller:
         return command
     ############################################### 扫描模式 ##############################################
     def Generate_Scan_Sequence(self):
-        T  = 18
+        # T  = 18
+        T  = 6 
         dt = 0.01
 
         t_sequence = np.arange(0, T + dt, dt) # 生成时间序列
@@ -789,8 +688,12 @@ class Class_Drone_Controller:
         self.scan_index        = 0    # 初始化索引
         self.scan_FLAG_RESTART = True # 初始化重启标志 
         self.scan_max_index    = T/dt
-        self.squence_Shift_YAW    = np.sin( omega * t_sequence) * delta_YAW / 2  + YAW_shift
-        self.squence_Shift_Height = np.sin( omega * t_sequence) * delta_height / 2
+
+        # self.sequence_Shift_YAW    = np.sin( omega * t_sequence) * delta_YAW / 2  + YAW_shift  # 正弦函数扫描
+        self.sequence_Shift_YAW    =  (t_sequence) / T * (2 * np.pi) + YAW_shift                 # 匀速扫描
+
+        self.sequence_Shift_Height = np.sin( omega * t_sequence) * delta_height / 2              # 当前高度上下扫描
+        # self.sequence_Shift_Height = np.ones_like(t_sequence)                                    # 固定高度扫描
     
     def Start_Scan_Command(self):
 
@@ -808,8 +711,8 @@ class Class_Drone_Controller:
 
         command = [self.scan_POS[X],
                    self.scan_POS[Y],
-                   self.scan_POS[Z] + self.squence_Shift_Height[self.scan_index], # 高度
-                   self.scan_YAW    + self.squence_Shift_YAW[self.scan_index]]
+                   np.maximum(self.scan_POS[Z] + self.sequence_Shift_Height[self.scan_index], 0.4), # 高度 最低为 0.4
+                   self.scan_YAW    + self.sequence_Shift_YAW[self.scan_index]]
         
         self.scan_index += 1
 
@@ -890,7 +793,7 @@ class Class_Drone_Controller:
 
             except IndexError:
                 yaw = self.sensor_data['yaw'] # 当前 YAW 角度
-                current_setpoint[3] = yaw              # 目标位置 + YAW
+                current_setpoint[3] = yaw     # 目标位置 + YAW
             
             # 更新路径时间
             self.timer += dt
@@ -898,6 +801,38 @@ class Class_Drone_Controller:
         return current_setpoint.tolist() # 转换为列表
 
 
+
+
+    ############################################### 点位排序 ############################################
+    def return_path_order_normal(self, gate_points):
+        path_points = []
+        path_points.append(self.Drone_POS_GLOBAL.tolist()) # 当前位置
+        path_points.append([1, 4, 1])     # 回到起点
+        path_points.extend(gate_points[0:-1])  # P1 -> P4
+        path_points.append(gate_points[-1])    # P5
+        path_points.append([1, 4, 1])     # 回到起点
+        path_points.extend(gate_points)        # P1 -> P5
+        path_points.append([1, 4, 1])     # 回到起点
+        path_points.extend(gate_points)        # P1 -> P5 # 添加第三圈防止出事
+        path_points.append([1, 4, 1])     # 回到起点
+
+        return path_points
+
+    def return_path_order_xunhang(self,gate_points):
+
+        path_points = []
+        path_points.append(self.Drone_POS_GLOBAL.tolist()) # 当前位置
+        path_points.append([4.5,4,1])     # 绕过中心点
+        path_points.extend(gate_points)
+        path_points.append([1, 4, 1])     # 回到起点
+
+        path_points.extend(gate_points)
+        path_points.append([1, 4, 1])     # 回到起点
+
+        path_points.extend(gate_points)
+        path_points.append([1, 4, 1])     # 回到起点
+
+        return path_points
 
 
 
@@ -911,10 +846,6 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
                 dt,           # dt
                 ):
 
-    # NOTE: Displaying the camera image with cv2.imshow() will throw an error because GUI operations should be performed in the main thread.
-    # If you want to display the camera image you can call it main.py.
-
-    #0000FF 当前控制命令
     global Drone_Controller, Total_Time, Draw, Explore_State
 
     Total_Time += dt # 累计时间
@@ -936,10 +867,12 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
         
     # 在探索中 #FF0000
     if Explore_State == 0: # 探索状态
-        control_command = Drone_Controller.get_IMG_command()
+        # control_command = Drone_Controller.get_IMG_command()
+        # control_command = Drone_Controller.get_mix_command()
+        control_command = Drone_Controller.get_pathfollow_command()
 
         # 探索完毕标志位
-        if Drone_Controller.AT_GATE and Drone_Controller.RACING_EXPLORE == 5 or Total_Time > 25.0:
+        if Drone_Controller.AT_GATE and Drone_Controller.RACING_EXPLORE == 5 or Total_Time > 25.0 or Drone_Controller.first_lap_finish:
 
             # 修改标志位
             Explore_State = 1
@@ -948,24 +881,25 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
             save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")
 
             # 数据处理
-            data = AggregatedExtractor(Drone_Controller.target_pos_list_buffer) # 目标点数据处理
-            # points = data.convert_to_planning()
-            # points = data.convert_to_planning_shift(0.2)                  # 使用偏移数据竞速
-            points = data.convert_to_planning_shift_time_customized(0.2)  # 使用偏移数据竞速
+            data        = AggregatedExtractor(Drone_Controller.target_pos_list_buffer) # 目标点数据处理
+            # gate_points = data.convert_to_planning()
+            gate_points = data.convert_to_planning_shift(0.2)                  # 使用偏移数据竞速
+            # gate_points = data.convert_to_planning_shift_time_customized(0.2)  # 使用偏移数据竞速
 
-            # 根据目标点创建路径点顺序
-            # 重构 path，将 Gate 5 移植首位作为起点，并且再添加 Gate 5 作为终点
-            path_points = []
-            path_points.append(Drone_Controller.Drone_POS_GLOBAL.tolist()) # 当前位置
-            # path_points.append(points[-1])    # P5
-            path_points.append([1, 4, 1])     # 回到起点
-            path_points.extend(points[0:-1])  # P1 -> P4
-            path_points.append(points[-1])    # P5
-            path_points.append([1, 4, 1])     # 回到起点
-            path_points.extend(points)        # P1 -> P5
-            path_points.append([1, 4, 1])     # 回到起点
-            path_points.extend(points)        # P1 -> P5 # 添加第三圈防止出事
-            path_points.append([1, 4, 1])     # 回到起点
+            # # 根据目标点创建路径点顺序
+            # # 重构 path，将 Gate 5 移植首位作为起点，并且再添加 Gate 5 作为终点
+            # path_points = []
+            # path_points.append(Drone_Controller.Drone_POS_GLOBAL.tolist()) # 当前位置
+            # path_points.append([1, 4, 1])     # 回到起点
+            # path_points.extend(gate_points[0:-1])  # P1 -> P4
+            # path_points.append(gate_points[-1])    # P5
+            # path_points.append([1, 4, 1])     # 回到起点
+            # path_points.extend(gate_points)        # P1 -> P5
+            # path_points.append([1, 4, 1])     # 回到起点
+            # path_points.extend(gate_points)        # P1 -> P5 # 添加第三圈防止出事
+            # path_points.append([1, 4, 1])     # 回到起点
+
+            path_points = Drone_Controller.return_path_order_xunhang(gate_points)
 
             # 基于位置的路径规划
             planner = MotionPlanner3D(obstacles=None, path=path_points)

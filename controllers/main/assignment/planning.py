@@ -10,6 +10,8 @@ class MotionPlanner3D():
 
         self.path = path
 
+        self.t_f = len(self.path) * 1.5  # 20 -> 30
+
         self.DEBUG = DEBUG
 
         self.trajectory_setpoints = None
@@ -40,10 +42,9 @@ class MotionPlanner3D():
         self.disc_steps = 20    # Integer number steps to divide every path segment into to provide the reference positions for PID control # IDEAL: Between 10 and 20
         self.vel_lim    = 7.0   # Velocity limit of the drone (m/s)
         self.acc_lim    = 50.0  # Acceleration limit of the drone (m/s²)
-        t_f             = 30    # Final time at the end of the path (s)
 
         # Determine the number of segments of the path
-        self.times = np.linspace(0, t_f, len(path_waypoints)) # The time vector at each path waypoint to traverse (Vector of size m) (must be 0 at start)
+        self.times = np.linspace(0, self.t_f, len(path_waypoints)) # The time vector at each path waypoint to traverse (Vector of size m) (must be 0 at start)
 
     def compute_poly_matrix(self, t):
         # Inputs:
