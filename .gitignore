@@ -141,3 +141,4 @@ target_positions_filtered.csv
 target_positions.csv
 
 docs/exercise_2/*.png
+.vscode
