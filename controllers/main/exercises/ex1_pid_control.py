@@ -46,8 +46,8 @@ class quadrotor_controller():
             #00FF00
             # ### SOLUTION GAINS EXERCISE 1###
             gains = {
-                        "P_pos_z":   5.0,     "I_pos_z":  0.002,      "D_pos_z":   0.8,            # 5.0 0.0 0.8
-                        "P_pos_xy":  1.5,     "I_pos_xy": 0.005,      "D_pos_xy":  0.0,            # 1.5 0.0 0.0
+                        "P_pos_z":   6.0,     "I_pos_z":  0.002,      "D_pos_z":   0.8,            # 5.0 0.0 0.8
+                        "P_pos_xy":  1.7,     "I_pos_xy": 0.005,      "D_pos_xy":  0.0,            # 1.5 0.0 0.0
                         "P_vel_z":   7.0,     "I_vel_z":  0.0,      "D_vel_z":   2.0, 
                         "P_vel_xy":  0.5,     "I_vel_xy": 0.0,      "D_vel_xy":  0.015,
                         "P_att_rp":  10.0,    "I_att_rp": 0.0,      "D_att_rp":  0.2,

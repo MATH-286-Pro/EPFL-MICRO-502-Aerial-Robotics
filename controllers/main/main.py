@@ -682,6 +682,7 @@ if __name__ == '__main__':
     # seed = 2024573462
     # seed = 2025646964
     # seed = 2027708318
+    # seed = 2041385590
 
     # 2) 设置随机种子
     random.seed(seed)

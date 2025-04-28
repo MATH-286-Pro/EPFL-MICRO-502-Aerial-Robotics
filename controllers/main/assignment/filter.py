@@ -14,14 +14,14 @@ class AggregatedExtractor:
         self.points4 = np.array([d[4] for d in data_list], float)
 
         # 自建数据存储
-        self.data_filtered              = None  # 聚合后点 + 方向
-        self.data_filtered_sorted       = None  # 排序后的聚合结果
-        self.data_filtered_sorted_shift = None  # 平移调整后的坐标
+        self.P_A_aggregated                = None  # 聚合后点 + 方向
+        self.G_P_A_aggregated_sorted       = None  # 排序后的聚合结果
+        self.G_P_A_aggregated_sorted_shift = None  # 平移调整后的坐标
 
         # 生成扇区划分，并立即执行聚合流程
         self.generate_sector_angles()
         self.compute_conditional_idxs()
-        self.sort_aggregated()
+        self.sort_aggregated()           # 聚类排序
 
     def compute_mask(self):
         # 判断相邻 P4 点位移动是否小于阈值
@@ -30,6 +30,7 @@ class AggregatedExtractor:
         return mask
 
     # 判断角度 + 叉乘，计算索引并聚合每个簇的中心点与平均方向
+    # self.data_filtered_sorted =  Gate_Point 和 Gate_Arrow
     def compute_conditional_idxs(self):
         mask = self.compute_mask()
         idxs = []
@@ -73,7 +74,7 @@ class AggregatedExtractor:
             avg_arrow = arrows.mean(axis=0)
             agg.append({'Point': center, 'Arrow': avg_arrow})
 
-        self.data_filtered = agg
+        self.P_A_aggregated = agg
         return agg
 
     ############################################## 扇区划分与排序 #######################################
@@ -91,7 +92,7 @@ class AggregatedExtractor:
 
     def sort_aggregated(self):
         groups = defaultdict(list)
-        for item in self.data_filtered:
+        for item in self.P_A_aggregated:
             label, idx = self._sector(item['Point'][:2])
             if idx is not None:
                 groups[idx].append((item['Point'], item['Arrow']))
@@ -103,31 +104,84 @@ class AggregatedExtractor:
             mean_arr = np.mean(arrs, axis=0)
             result.append((f'Gate{idx}', mean_pt, mean_arr))
 
-        self.data_filtered_sorted = result
+        self.G_P_A_aggregated_sorted = result
 
     def convert_to_planning(self):
         # 返回 [(x,y,z), ...]
-        return [tuple(np.round(pt, 3)) for _, pt, _ in self.data_filtered_sorted]
+        return [tuple(np.round(pt, 3)) for _, pt, _ in self.G_P_A_aggregated_sorted]
 
     def convert_to_planning_shift(self, shift = 0.3):
-        self.data_filtered_sorted_shift = []
-        for label, center, arrow in self.data_filtered_sorted:
+        self.G_P_A_aggregated_sorted_shift = []
+        for label, center, arrow in self.G_P_A_aggregated_sorted:
             angle = np.arctan2(arrow[1], arrow[0])
             new_dir = angle - np.pi/2
             new_vec = np.array([np.cos(new_dir), np.sin(new_dir), 0.])
             new_pt = center + shift * new_vec
             point = tuple(np.round(new_pt, 3))
-            self.data_filtered_sorted_shift.append((label, point, arrow))
-        return [pt for _, pt, _ in self.data_filtered_sorted_shift]
+            self.G_P_A_aggregated_sorted_shift.append((label, point, arrow))
+        return [pt for _, pt, _ in self.G_P_A_aggregated_sorted_shift]
 
     def convert_to_planning_shift_time_customized(self, shift = 0.3):
-        self.data_filtered_sorted_shift = []
-        for label, center, arrow in self.data_filtered_sorted:
+        self.G_P_A_aggregated_sorted_shift = []
+        for label, center, arrow in self.G_P_A_aggregated_sorted:
             angle = np.arctan2(arrow[1], arrow[0])
             new_dir = angle - np.pi/2
             new_vec = np.array([np.cos(new_dir), np.sin(new_dir), 0.])
             new_pt = center + shift * new_vec
             new_pt[2] -= 0.2 # 基于时间导航需要降低高度
             point = tuple(np.round(new_pt, 3))
-            self.data_filtered_sorted_shift.append((label, point, arrow))
-        return [pt for _, pt, _ in self.data_filtered_sorted_shift]
+            self.G_P_A_aggregated_sorted_shift.append((label, point, arrow))
+        return [pt for _, pt, _ in self.G_P_A_aggregated_sorted_shift]
+    
+
+    
+    #FF0000
+    def shift_points_bidirectional(self, distance):
+
+        shifted_points = []
+        for label, pt, arrow in self.G_P_A_aggregated_sorted:
+            pt = np.array(pt, dtype=float)
+            arrow = np.array(arrow, dtype=float)
+            norm = np.linalg.norm(arrow)
+            if norm > 1e-8:
+                dir_vec = arrow / norm
+            else:
+                dir_vec = arrow  # 零向量时不移动
+
+            # 后移：pt - distance * dir_vec
+            back_pt = pt - distance * dir_vec
+            # 前移：pt + distance * dir_vec
+            forth_pt = pt + distance * dir_vec
+
+            shifted_points.append(tuple(back_pt))
+            shifted_points.append(tuple(forth_pt))
+
+        return shifted_points
+
+    # def return_planned_path(self, current_pos):
+
+    #     start = [1, 4, 1] # 起点
+    #     gate_points = self.convert_to_planning()
+
+    #     # 创建路径
+    #     path_points = []
+
+    #     # 第一圈
+    #     path_points.append(current_pos)
+    #     path_points.extend(gate_points)
+    #     path_points.append(start)
+        
+    #     # 第二圈
+    #     path_points.extend(gate_points)
+    #     path_points.append(start)
+
+    #     # 第三圈
+    #     path_points.extend(gate_points)
+    #     path_points.append(start)
+
+    #     # 第四圈
+    #     path_points.extend(gate_points)
+    #     path_points.append(start)
+
+    #     return path_points
+    
