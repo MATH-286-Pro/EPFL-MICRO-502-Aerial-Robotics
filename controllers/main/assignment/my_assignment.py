@@ -767,24 +767,24 @@ class Class_Drone_Controller:
 
 
     ############################################### 点位排序 ############################################
-    def return_path_order_normal(self, gate_points):
+    def return_path_explore(self, gate_points):
+
+        start = [1, 4, 1] # 起点
+        gate_points_reverse = gate_points.copy()
+        gate_points_reverse.reverse() # 反转顺序
+
         path_points = []
-        path_points.append(self.Drone_POS_GLOBAL.tolist()) # 当前位置
-        path_points.append([1, 4, 1])     # 回到起点
-        path_points.extend(gate_points[0:-1])  # P1 -> P4
-        path_points.append(gate_points[-1])    # P5
-        path_points.append([1, 4, 1])     # 回到起点
-        path_points.extend(gate_points)        # P1 -> P5
-        path_points.append([1, 4, 1])     # 回到起点
-        path_points.extend(gate_points)        # P1 -> P5 # 添加第三圈防止出事
-        path_points.append([1, 4, 1])     # 回到起点
+        path_points.append(start) # 起点
+        path_points.extend(gate_points_reverse)
+        path_points.append(start) # 回到起点
 
         return path_points
+
 
     def return_path_order_xunhang(self,gate_points):
 
         path_points = []
-        path_points.append(self.Drone_POS_GLOBAL.tolist()) # 当前位置
+        path_points.append([1, 4, 1])     # 回到起点
 
         path_points.extend(gate_points)
         path_points.append([1, 4, 1])     # 回到起点
@@ -828,17 +828,19 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
         path.append(start)
         path.extend(mid)
         path.append(start)
+
+        path = [[1, 4, 1],
+                [2, 6, 1], # 左上角
+                [4, 7, 1],
+                [6, 6, 1], # 右上角
+                [7, 4, 1],
+                [6, 2, 1], # 右下角
+                [4, 1, 1],
+                [2, 2, 1], # 左下角
+                [1, 4, 1]]
+
         
-        # path = [[1, 4, 1],
-        #         [1, 1, 1],
-        #         [7, 1, 1],
-        #         [7, 7, 1],
-        #         [1, 7, 1],
-        #         [2, 6, 1],   # 绕过中心点
-        #         [6, 4, 1],   # 绕过中心点
-        #         [0.2, 3, 1]] # 绕过中心点 #00FF00
-        planner = MotionPlanner3D(obstacles=None,
-                                  time = None, 
+        planner = MotionPlanner3D(time = None, 
                                   path = path)
         Drone_Controller.racing_path = planner.trajectory_setpoints
         Drone_Controller.racing_time = planner.time_setpoints
@@ -849,14 +851,21 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
 
     # 起飞命令
     if sensor_data['z_global'] < 2.0 and not Drone_Controller.takeoff:
-        control_command = [sensor_data['x_global'], sensor_data['y_global'], sensor_data['z_global'] + 1.0, sensor_data['yaw']]
+
+        YAW = sensor_data['yaw']
+
+        if sensor_data['yaw'] < np.pi/2 and sensor_data['z_global'] > 0.2:
+            YAW = sensor_data['yaw'] + np.deg2rad(40)
+
+        control_command = [sensor_data['x_global'], sensor_data['y_global'], sensor_data['z_global'] + 1.0, YAW]
+
         if sensor_data['z_global'] > 1.2:
             Drone_Controller.takeoff = True
+
         return control_command
         
-    # 在探索中 #FF0000
-    if Explore_State == 0:   # 探索：第一圈
-      
+    #00FF00 探索：第一圈 (-25度)
+    if Explore_State == 0:   
         control_command = Drone_Controller.get_path_command(path = Drone_Controller.racing_path,
                                                             time = Drone_Controller.racing_time,
                                                             mode = "position",
@@ -865,13 +874,42 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
         if Drone_Controller.lap_finish == True:
             Explore_State += 1 # 修改状态位
 
-    elif Explore_State == 1: # 探索：第二圈
-
+    #00FF00 探索：第二圈 (-40度)
+    elif Explore_State == 1: 
         control_command = Drone_Controller.get_path_command(path = Drone_Controller.racing_path,
                                                             time = Drone_Controller.racing_time,
                                                             mode = "position",
                                                             dt   = dt,
                                                             YAW_SHIFT = np.deg2rad(-40))
+        if Drone_Controller.lap_finish == True:
+            Explore_State += 1
+
+            # 数据处理
+            data        = AggregatedExtractor(Drone_Controller.target_pos_list_buffer) # 目标点数据处理
+            gate_points = data.convert_to_planning()
+
+            # 路径规划
+            planner = MotionPlanner3D(time = None, 
+                                      path = Drone_Controller.return_path_explore(gate_points)) #00FF00
+            Drone_Controller.racing_path = planner.trajectory_setpoints
+            Drone_Controller.racing_time = planner.time_setpoints
+
+    #00FF00 探索：第三圈 (轨迹跟踪)
+    elif Explore_State == 2: 
+        control_command = Drone_Controller.get_path_command(path = Drone_Controller.racing_path,
+                                                            time = Drone_Controller.racing_time,
+                                                            mode = "position",
+                                                            dt   = dt)
+        if Drone_Controller.lap_finish == True:
+            Explore_State += 1
+
+    #00FF00  探索：第四圈 (巡航 查漏补缺)
+    elif Explore_State == 3: 
+        control_command = Drone_Controller.get_path_command(path = Drone_Controller.racing_path,
+                                                    time = Drone_Controller.racing_time,
+                                                    mode = "position",
+                                                    dt   = dt,
+                                                    YAW_SHIFT = np.deg2rad(-30)) #0000FF 可能需要加入 take place YAW
 
         # 探索完毕标志位
         if Drone_Controller.lap_finish == True:
@@ -890,15 +928,15 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
             # gate_points = data.shift_points_bidirectional(1.0)
 
             # 路径规划
-            planner = MotionPlanner3D(obstacles=None, 
-                                      time = None, 
+            planner = MotionPlanner3D(time = None, 
                                       path = Drone_Controller.return_path_order_xunhang(gate_points))
             Drone_Controller.racing_path = planner.trajectory_setpoints
             Drone_Controller.racing_time = planner.time_setpoints
 
-     
-    # 探索完毕 #FF0000
-    elif Explore_State == 2: # 探索完毕
+
+
+    #00FF00 探索完毕
+    elif Explore_State == 4: # 探索完毕
         control_command = Drone_Controller.get_path_command(path = Drone_Controller.racing_path,
                                                             time = Drone_Controller.racing_time,
                                                             mode = "position",

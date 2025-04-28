@@ -6,7 +6,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 class MotionPlanner3D():
     
     #Question: SIMON PID, what is vel_max set for PID? Check should be same here
-    def __init__(self, obstacles, path, time = None, DEBUG = False):
+    def __init__(self, path, time = None, DEBUG = False, obstacles = None):
 
         self.path = path
 
