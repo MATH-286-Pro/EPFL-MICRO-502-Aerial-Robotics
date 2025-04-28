@@ -6,11 +6,14 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 class MotionPlanner3D():
     
     #Question: SIMON PID, what is vel_max set for PID? Check should be same here
-    def __init__(self, obstacles, path, DEBUG = False):
+    def __init__(self, obstacles, path, time = None, DEBUG = False):
 
         self.path = path
 
-        self.t_f = len(self.path) * 1.5  # 20 -> 30
+        if time == None:
+            self.t_f = len(self.path) * 1.5  # 20 -> 30
+        else:
+            self.t_f = time
 
         self.DEBUG = DEBUG
 

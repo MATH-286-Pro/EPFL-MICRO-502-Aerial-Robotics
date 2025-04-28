@@ -483,98 +483,6 @@ class Class_Drone_Controller:
             self.YAW_NORMAL = normal_angle 
             self.Drone_YAW_NORMAL_VEC = normal_vector
 
-    ############################################### 寻线导航 ############################################
-    def path_command_init(self, path, time = None):
-        self.lap_start  = False
-        self.lap_finish = False
-        self.lap_index  = 0
-        self.lap_path   = path
-        self.lap_time   = time
-        self.timer      = 0
-    
-    def get_path_command(self, mode = "position", dt = None):
-
-        if self.lap_start == False:
-            self.lap_start = True
-            self.lap_index = 0
-            self.lap_finish = False
-
-        # 基于位置
-        if mode == "position":
-            try:
-                command = self.lap_path[self.lap_index]
-
-                try:
-                    pos1 = self.lap_path[self.lap_index]
-                    pos2 = self.lap_path[self.lap_index+1]
-                    yaw  = np.arctan2(pos2[1] - pos1[1], pos2[0] - pos1[0])
-                    command[3] = yaw
-                except IndexError:
-                    yaw = self.sensor_data["yaw"]
-                    command[3] = yaw
-            except IndexError:
-                command = self.stay()
-            
-            current_pos = self.Drone_POS_GLOBAL
-            target_pos  = command[0:3]
-            distance = compute_distance(current_pos, target_pos)
-
-            if distance < 1.5:
-                self.lap_index += 1
-                if self.lap_index == len(self.lap_path):
-                    self.lap_start  = False
-                    self.lap_finish = True
-                    self.lap_index  = 0
-            
-            return command.tolist()
-        
-        # 基于时间
-        elif mode == "time":
-            # self.lap+path 索引没用完
-            try:
-                if self.timer >= self.lap_time[self.lap_index]:
-                    self.lap_index += 1
-                command = self.lap_path[self.lap_index]
-            
-            except IndexError:
-                command = self.lap_path[-1]
-                self.lap_start  = False
-                self.lap_finish = True
-            
-            try:
-                pos1 = self.lap_path[self.lap_index]
-                pos2 = self.lap_path[self.lap_index+1]
-                yaw  = np.arctan2(pos2[1] - pos1[1], pos2[0] - pos1[0])
-                command[3] = yaw
-            except IndexError:
-                yaw = self.sensor_data["yaw"]
-                command[3] = yaw
-            
-            self.timer += dt
-
-            return command.tolist()
-        
-        else:
-            raise ValueError("Invalid mode. Use 'position' or 'time'.")
-
-
-
-    def get_pathfollow_command(self, path,  dt_ = None):
-
-        if self.lap_start == False:
-
-            # 路径与时间生成
-            planner = MotionPlanner3D(obstacles = None, 
-                                      time = 10, 
-                                      path=path)
-            self.path_command_init(path = planner.trajectory_setpoints,
-                                   time = planner.time_setpoints)
-            self.lap_start = True
-
-        if self.lap_start == True:
-            return self.get_path_command(mode = "time", dt = dt_) # 基于位置的路径跟随
-
-
 
     ############################################### 视觉导航 ##############################################
 
@@ -764,88 +672,95 @@ class Class_Drone_Controller:
 
         return command
 
-    ############################################### 基于位置的 巡航模式 ##############################################
-    def get_Racing_command_POS_BASED(self):
-        
-        
-        # 如果在 index 内
-        try:
-            command = self.RACING_PATH[self.RACING_INDEX]
+    ############################################### 巡航模式 ##############################################
+    def path_command_init(self, path, time = None):
+        self.lap_start  = True
+        self.lap_finish = False
+        self.lap_index  = 0
+        self.lap_path   = path
+        self.lap_time   = time
+        self.timer      = 0
+    
+    def return_path_command(self, mode = "position", dt = None, YAW_SHIFT = 0):
 
-            try: 
-                pos1 = self.RACING_PATH[self.RACING_INDEX]
-                pos2 = self.RACING_PATH[self.RACING_INDEX + 1]
+        if self.lap_start == False:
+            self.lap_start = True
+            self.lap_index = 0
+            self.lap_finish = False
 
-                yaw = np.arctan2(pos2[1] - pos1[1], pos2[0] - pos1[0]) # 计算 YAW 角度
+        # 基于位置
+        if mode == "position":
+            try:
+                command = self.lap_path[self.lap_index]
 
-                command[3] = yaw # 目标位置 + YAW
-
+                try:
+                    pos1 = self.lap_path[self.lap_index]
+                    pos2 = self.lap_path[self.lap_index+1]
+                    yaw  = np.arctan2(pos2[1] - pos1[1], pos2[0] - pos1[0])
+                    command[3] = yaw + YAW_SHIFT
+                except IndexError:
+                    yaw = self.sensor_data["yaw"]
+                    command[3] = yaw
             except IndexError:
-                yaw = self.sensor_data['yaw'] # 当前 YAW 角度
-                command[3] = yaw              # 目标位置 + YAW
+                command = self.stay()
+            
+            current_pos = self.Drone_POS_GLOBAL
+            target_pos  = command[0:3]
+            distance = compute_distance(current_pos, target_pos)
 
-            command = command.tolist() # 转换为列表
-
-            # self.RACING_INDEX += 1
-
-        # 如果不在 index 内
-        except IndexError:
-            command = self.stay()
+            if distance < 1.5:
+                self.lap_index += 1
+                if self.lap_index == len(self.lap_path):
+                    self.lap_start  = False
+                    self.lap_finish = True
+                    self.lap_index  = 0
+            
+            return command.tolist()
         
+        # 基于时间
+        elif mode == "time":
+            # self.lap+path 索引没用完
+            try:
+                if self.timer >= self.lap_time[self.lap_index]:
+                    self.lap_index += 1
+                command = self.lap_path[self.lap_index]
+            
+            except IndexError:
+                command = self.lap_path[-1]
+                self.lap_start  = False
+                self.lap_finish = True
+            
+            try:
+                pos1 = self.lap_path[self.lap_index]
+                pos2 = self.lap_path[self.lap_index+1]
+                yaw  = np.arctan2(pos2[1] - pos1[1], pos2[0] - pos1[0])
+                command[3] = yaw + YAW_SHIFT
+            except IndexError:
+                yaw = self.sensor_data["yaw"]
+                command[3] = yaw
+            
+            self.timer += dt
+
+            return command.tolist()
         
-        # 控制命令一致性
-        Current_Pos = self.Drone_POS_GLOBAL
-        Target_Pos  = command[0:3]
-        distance = compute_distance(Current_Pos, Target_Pos) # 计算距离
-
-        if distance < 1.5: # 到达目标点范围
-            self.RACING_INDEX += 1
-
-        return command
+        else:
+            raise ValueError("Invalid mode. Use 'position' or 'time'.")
 
 
-    #  ############################################ 基于时间的 巡航模式 ##############################################
-    def get_Racing_command_TIME_BASED(self, dt):
-
+    def get_path_command(self, path, time, mode = "position", dt = None, YAW_SHIFT = 0):
+        
         # 初始化
         if self.lap_start == False:
-            self.timer = 0.0
-            self.index_current_setpoint = 0
-
-        # 初始化后
-        if self.timer is not None:
-            
-            # 计算目标位置
-            # path_points 索引没用完
-            try:
-                # Update new setpoint
-                if self.timer >= self.racing_time[self.index_current_setpoint]:
-                    self.index_current_setpoint += 1
-                current_setpoint = self.racing_path[self.index_current_setpoint,:]
-            
-            # path_points 索引用完了
-            except IndexError:
-                current_setpoint = self.racing_path[-1]
-
-
-            # 计算 目标YAW
-            try: 
-                pos1 = self.RACING_PATH[self.index_current_setpoint]
-                pos2 = self.RACING_PATH[self.index_current_setpoint + 1]
-
-                yaw = np.arctan2(pos2[1] - pos1[1], pos2[0] - pos1[0]) # 计算 YAW 角度
-
-                current_setpoint[3] = yaw # 目标位置 + YAW
-
-            except IndexError:
-                yaw = self.sensor_data['yaw'] # 当前 YAW 角度
-                current_setpoint[3] = yaw     # 目标位置 + YAW
-            
-            # 更新路径时间
-            self.timer += dt
-                    
-        return current_setpoint.tolist() # 转换为列表
-
+            self.path_command_init(path = path,
+                                   time = time)
+        
+        # 生成命令
+        if self.lap_start == True and mode == "position":
+            return self.return_path_command(mode = "position", dt = None, YAW_SHIFT = YAW_SHIFT) 
+        elif self.lap_start == True and mode == "time":
+            return self.return_path_command(mode = "time", dt = dt, YAW_SHIFT = YAW_SHIFT)
+        else:
+            return self.stay()
 
 
 
@@ -867,11 +782,7 @@ class Class_Drone_Controller:
     def return_path_order_xunhang(self,gate_points):
 
         path_points = []
-
-        path_points.append([2,6,1])       # 绕过中心点
-        path_points.append([6,4,1])       # 绕过中心点
-        path_points.append([2,2,1])       # 绕过中心点
-
+        path_points.append(self.Drone_POS_GLOBAL.tolist()) # 当前位置
 
         path_points.extend(gate_points)
         path_points.append([1, 4, 1])     # 回到起点
@@ -905,6 +816,22 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
         Drone_Controller = Class_Drone_Controller(sensor_data, camera_data)  # 创建无人机控制器对象
         print("Drone_Controller Created")
 
+        # 路径点
+        path = [[1, 4, 1],
+                [1, 1, 1],
+                [7, 1, 1],
+                [7, 7, 1],
+                [1, 7, 1],
+                [2, 6, 1],   # 绕过中心点
+                [6, 4, 1],   # 绕过中心点
+                [0.2, 3, 1]] # 绕过中心点 #00FF00
+        planner = MotionPlanner3D(obstacles=None,
+                                  time = 15, 
+                                  path = path)
+        Drone_Controller.racing_path = planner.trajectory_setpoints
+        Drone_Controller.racing_time = planner.time_setpoints
+
+
     # 无人机状态更新
     Drone_Controller.update(sensor_data, camera_data) 
 
@@ -918,14 +845,13 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
     # 在探索中 #FF0000
     if Explore_State == 0: # 探索状态
         # control_command = Drone_Controller.get_IMG_command()
-        # 路径点
-        path = [[1, 4, 1],
-                [1, 1, 1],
-                [7, 1, 1],
-                [7, 7, 1],
-                [1, 7, 1],
-                [2, 6, 1]]
-        control_command = Drone_Controller.get_pathfollow_command(path, dt)
+
+        
+        control_command = Drone_Controller.get_path_command(path = Drone_Controller.racing_path,
+                                                            time = Drone_Controller.racing_time,
+                                                            mode = "position",
+                                                            dt   = dt,
+                                                            YAW_SHIFT = np.deg2rad(25))
 
         # 探索完毕标志位
         if Drone_Controller.lap_finish == True:
@@ -942,21 +868,20 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
             # gate_points = data.convert_to_planning_shift(0.2)                  # 使用偏移数据竞速
             gate_points = data.convert_to_planning_shift_time_customized(0.2)  # 使用偏移数据竞速
 
-            path_points = Drone_Controller.return_path_order_xunhang(gate_points)  # 巡航模式 2-3 圈路径
-
-            # 基于位置的路径规划
-            planner = MotionPlanner3D(obstacles=None, time = None, path=path_points)
-            Drone_Controller.RACING_PATH = planner.trajectory_setpoints
-
-            # 测试基于的时间路径
+            # 路径规划
+            planner = MotionPlanner3D(obstacles=None, 
+                                      time = None, 
+                                      path = Drone_Controller.return_path_order_xunhang(gate_points))
             Drone_Controller.racing_path = planner.trajectory_setpoints
             Drone_Controller.racing_time = planner.time_setpoints
 
      
     # 探索完毕 #FF0000
     elif Explore_State == 1: # 探索完毕
-        control_command = Drone_Controller.get_Racing_command_POS_BASED() # 路径规划命令
-        # control_command = Drone_Controller.get_Racing_command_TIME_BASED(dt) # 路径规划命令
+        control_command = Drone_Controller.get_path_command(path = Drone_Controller.racing_path,
+                                                            time = Drone_Controller.racing_time,
+                                                            mode = "position",
+                                                            dt   = dt)
 
 
     return control_command 
