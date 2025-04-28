@@ -820,15 +820,14 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
 
         # 路径点
         start = [1, 4, 1] # 起点
-        mid   = [[1, 1, 1],
-                [7, 1, 1],
-                [7, 7, 1],
-                [1, 7, 1]]; mid.reverse()
+        mid   = [[2, 6, 1],
+                 [6, 6, 1],
+                 [6, 2, 1],
+                 [2, 2, 1]]
         path = []
         path.append(start)
         path.extend(mid)
         path.append(start)
-        path.extend(mid)
         
         # path = [[1, 4, 1],
         #         [1, 1, 1],
@@ -839,7 +838,7 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
         #         [6, 4, 1],   # 绕过中心点
         #         [0.2, 3, 1]] # 绕过中心点 #00FF00
         planner = MotionPlanner3D(obstacles=None,
-                                  time = 15, 
+                                  time = None, 
                                   path = path)
         Drone_Controller.racing_path = planner.trajectory_setpoints
         Drone_Controller.racing_time = planner.time_setpoints
@@ -856,21 +855,29 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
         return control_command
         
     # 在探索中 #FF0000
-    if Explore_State == 0: # 探索状态
-        # control_command = Drone_Controller.get_IMG_command()
-
-        
+    if Explore_State == 0:   # 探索：第一圈
+      
         control_command = Drone_Controller.get_path_command(path = Drone_Controller.racing_path,
                                                             time = Drone_Controller.racing_time,
                                                             mode = "position",
                                                             dt   = dt,
-                                                            YAW_SHIFT = np.deg2rad(25))
+                                                            YAW_SHIFT = np.deg2rad(-25))
+        if Drone_Controller.lap_finish == True:
+            Explore_State += 1 # 修改状态位
+
+    elif Explore_State == 1: # 探索：第二圈
+
+        control_command = Drone_Controller.get_path_command(path = Drone_Controller.racing_path,
+                                                            time = Drone_Controller.racing_time,
+                                                            mode = "position",
+                                                            dt   = dt,
+                                                            YAW_SHIFT = np.deg2rad(-40))
 
         # 探索完毕标志位
         if Drone_Controller.lap_finish == True:
 
             # 修改标志位
-            Explore_State = 1
+            Explore_State += 1
 
             # 保存数据
             save_data(Drone_Controller.target_pos_list_buffer, file_name="target_positions")
@@ -891,7 +898,7 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
 
      
     # 探索完毕 #FF0000
-    elif Explore_State == 1: # 探索完毕
+    elif Explore_State == 2: # 探索完毕
         control_command = Drone_Controller.get_path_command(path = Drone_Controller.racing_path,
                                                             time = Drone_Controller.racing_time,
                                                             mode = "position",
