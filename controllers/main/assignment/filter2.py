@@ -10,9 +10,10 @@ class AggregatedExtractor:
         self.cluster_dist = cluster_dist
 
         # 自建数据
-        self.data_filtered              = None  # 点 + 角度
-        self.data_filtered_sorted       = None  # 排序后的点 + 角度 
-        self.data_filtered_sorted_shift = None
+        self.P_A_aggregated                = None  # 点 + 角度
+        self.G_P_A_aggregated_sorted       = None  # 排序后的点 + 角度 
+        self.G_P_A_aggregated_sorted_shift = None
+        self.P_A_aggregated_extend         = None
 
         # 读取数据
         self._load_data(csv_path)        # 加载数据
@@ -82,7 +83,7 @@ class AggregatedExtractor:
             avg_arrow = arrows.mean(0)
             agg.append({'Point': center, 'Arrow': avg_arrow})
 
-        self.data_filtered = agg
+        self.P_A_aggregated = agg
         return agg
 
     ############################################## sector 排序 #######################################
@@ -100,7 +101,7 @@ class AggregatedExtractor:
 
     # sector 排序
     def sort_aggregated(self):
-        points_arrows = self.data_filtered
+        points_arrows = self.P_A_aggregated
         groups = defaultdict(list)
 
         # 聚集 (Point, Arrow) 对
@@ -117,14 +118,14 @@ class AggregatedExtractor:
             mean_arr = np.mean(arrs,  axis=0)
             result.append((f'Gate{idx}', mean_pt, mean_arr))
 
-        self.data_filtered_sorted = result
+        self.G_P_A_aggregated_sorted = result
 
     def convert_to_planning(self):
-        return [tuple(map(lambda x: round(float(x), 3), pt)) for _, pt, _ in self.data_filtered_sorted]
+        return [tuple(map(lambda x: round(float(x), 3), pt)) for _, pt, _ in self.G_P_A_aggregated_sorted]
 
     def convert_to_planning_shift(self):
-        self.data_filtered_sorted_shift = []
-        for item in self.data_filtered_sorted:
+        self.G_P_A_aggregated_sorted_shift = []
+        for item in self.G_P_A_aggregated_sorted:
             # 拆分数据
             label, center, arrow = item
             # 计算新的坐标
@@ -139,6 +140,29 @@ class AggregatedExtractor:
                 round(float(new_pt[1]), 3),
                 round(float(new_pt[2]), 3)
             )
-            self.data_filtered_sorted_shift.append((label, point, arrow))
+            self.G_P_A_aggregated_sorted_shift.append((label, point, arrow))
 
-        return [tuple(map(lambda x: round(float(x), 3), pt)) for _, pt, _ in self.data_filtered_sorted_shift]
+        return [tuple(map(lambda x: round(float(x), 3), pt)) for _, pt, _ in self.G_P_A_aggregated_sorted_shift]
+
+    #FF0000
+    def shift_points_bidirectional(self, distance):
+
+        shifted_points = []
+        for label, pt, arrow in self.G_P_A_aggregated_sorted:
+            pt = np.array(pt, dtype=float)
+            arrow = np.array(arrow, dtype=float)
+            norm = np.linalg.norm(arrow)
+            if norm > 1e-8:
+                dir_vec = arrow / norm
+            else:
+                dir_vec = arrow  # 零向量时不移动
+
+            # 后移：pt - distance * dir_vec
+            back_pt = pt - distance * dir_vec
+            # 前移：pt + distance * dir_vec
+            forth_pt = pt + distance * dir_vec
+
+            shifted_points.append(tuple(back_pt))
+            shifted_points.append(tuple(forth_pt))
+
+        return shifted_points

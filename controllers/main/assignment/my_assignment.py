@@ -683,6 +683,8 @@ class Class_Drone_Controller:
     
     def return_path_command(self, mode = "position", dt = None, YAW_SHIFT = 0):
 
+        speed = 1.0
+
         if self.lap_start == False:
             self.lap_start = True
             self.lap_index = 0
@@ -708,7 +710,7 @@ class Class_Drone_Controller:
             target_pos  = command[0:3]
             distance = compute_distance(current_pos, target_pos)
 
-            if distance < 1.5:
+            if distance < speed:
                 self.lap_index += 1
                 if self.lap_index == len(self.lap_path):
                     self.lap_start  = False
@@ -817,14 +819,25 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
         print("Drone_Controller Created")
 
         # 路径点
-        path = [[1, 4, 1],
-                [1, 1, 1],
+        start = [1, 4, 1] # 起点
+        mid   = [[1, 1, 1],
                 [7, 1, 1],
                 [7, 7, 1],
-                [1, 7, 1],
-                [2, 6, 1],   # 绕过中心点
-                [6, 4, 1],   # 绕过中心点
-                [0.2, 3, 1]] # 绕过中心点 #00FF00
+                [1, 7, 1]]; mid.reverse()
+        path = []
+        path.append(start)
+        path.extend(mid)
+        path.append(start)
+        path.extend(mid)
+        
+        # path = [[1, 4, 1],
+        #         [1, 1, 1],
+        #         [7, 1, 1],
+        #         [7, 7, 1],
+        #         [1, 7, 1],
+        #         [2, 6, 1],   # 绕过中心点
+        #         [6, 4, 1],   # 绕过中心点
+        #         [0.2, 3, 1]] # 绕过中心点 #00FF00
         planner = MotionPlanner3D(obstacles=None,
                                   time = 15, 
                                   path = path)
@@ -864,9 +877,10 @@ def get_command(sensor_data,  # 传感器数据 (详见上面的信息)
 
             # 数据处理
             data        = AggregatedExtractor(Drone_Controller.target_pos_list_buffer) # 目标点数据处理
-            # gate_points = data.convert_to_planning()
+            gate_points = data.convert_to_planning()
             # gate_points = data.convert_to_planning_shift(0.2)                  # 使用偏移数据竞速
-            gate_points = data.convert_to_planning_shift_time_customized(0.2)  # 使用偏移数据竞速
+            # gate_points = data.convert_to_planning_shift_time_customized(0.2)  # 使用偏移数据竞速
+            # gate_points = data.shift_points_bidirectional(1.0)
 
             # 路径规划
             planner = MotionPlanner3D(obstacles=None, 
