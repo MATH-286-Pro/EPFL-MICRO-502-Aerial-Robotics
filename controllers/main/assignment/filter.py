@@ -14,8 +14,9 @@ class AggregatedExtractor:
         self.points4 = np.array([d[4] for d in data_list], float)
 
         # 自建数据存储
-        self.P_A_aggregated                = None  # 聚合后点 + 方向
+        self.P_A_aggregated                = None  # 聚合后点 + 方向        dict 数据
         self.G_P_A_aggregated_sorted       = None  # 排序后的聚合结果
+        self.G_P_A_aggregated_sorted_comp  = None  # 补偿后的聚合结果
         self.G_P_A_aggregated_sorted_shift = None  # 平移调整后的坐标
 
         # 生成扇区划分，并立即执行聚合流程
@@ -90,6 +91,41 @@ class AggregatedExtractor:
                 return f'Gate{idx}', idx
         return None, None
 
+    # def sort_aggregated(self):
+    #     groups = defaultdict(list)
+    #     for item in self.P_A_aggregated:
+    #         label, idx = self._sector(item['Point'][:2])
+    #         if idx is not None:
+    #             groups[idx].append((item['Point'], item['Arrow']))
+
+    #     result = []
+    #     for idx in sorted(groups):
+    #         pts, arrs = zip(*groups[idx])
+    #         mean_pt = np.mean(pts, axis=0)
+    #         mean_arr = np.mean(arrs, axis=0)
+    #         result.append((f'Gate{idx}', mean_pt, mean_arr))
+
+    #     self.G_P_A_aggregated_sorted = result
+
+
+
+    # def convert_to_planning(self):
+    #     # 返回 [(x,y,z), ...]
+    #     return [tuple(np.round(pt, 3)) for _, pt, _ in self.G_P_A_aggregated_sorted]
+
+    # def convert_to_planning_shift(self, shift = 0.3):
+    #     self.G_P_A_aggregated_sorted_shift = []
+    #     for label, center, arrow in self.G_P_A_aggregated_sorted:
+    #         angle = np.arctan2(arrow[1], arrow[0])
+    #         new_dir = angle - np.pi/2
+    #         new_vec = np.array([np.cos(new_dir), np.sin(new_dir), 0.])
+    #         new_pt = center + shift * new_vec
+    #         point = tuple(np.round(new_pt, 3))
+    #         self.G_P_A_aggregated_sorted_shift.append((label, point, arrow))
+    #     return [pt for _, pt, _ in self.G_P_A_aggregated_sorted_shift]
+    
+
+    # 基于字典型数据
     def sort_aggregated(self):
         groups = defaultdict(list)
         for item in self.P_A_aggregated:
@@ -97,91 +133,54 @@ class AggregatedExtractor:
             if idx is not None:
                 groups[idx].append((item['Point'], item['Arrow']))
 
-        result = []
+        # 建立一个按照 idx 排序的 dict：GateX → (mean_pt, mean_arr)
+        d = {}
         for idx in sorted(groups):
             pts, arrs = zip(*groups[idx])
-            mean_pt = np.mean(pts, axis=0)
+            mean_pt  = np.mean(pts,  axis=0)
             mean_arr = np.mean(arrs, axis=0)
-            result.append((f'Gate{idx}', mean_pt, mean_arr))
+            d[f'Gate{idx}'] = (mean_pt, mean_arr)
 
-        self.G_P_A_aggregated_sorted = result
+        # 存成字典，保留 insertion order
+        self.G_P_A_aggregated_sorted = d
 
     def convert_to_planning(self):
-        # 返回 [(x,y,z), ...]
-        return [tuple(np.round(pt, 3)) for _, pt, _ in self.G_P_A_aggregated_sorted]
+        """
+        返回 [(x,y,z), ...]，顺序与原先按 Gate1, Gate2, ... 排序保持一致
+        """
+        # 如果 Gate 标签是 Gate<number>，下面这句会按数字排序：
+        items = sorted(
+            self.G_P_A_aggregated_sorted.items(),
+            key=lambda kv: int(kv[0].replace('Gate', ''))
+        )
+        return [
+            tuple(np.round(center, 3))
+            for _, (center, _) in items
+        ]
 
-    def convert_to_planning_shift(self, shift = 0.3):
-        self.G_P_A_aggregated_sorted_shift = []
-        for label, center, arrow in self.G_P_A_aggregated_sorted:
-            angle = np.arctan2(arrow[1], arrow[0])
-            new_dir = angle - np.pi/2
-            new_vec = np.array([np.cos(new_dir), np.sin(new_dir), 0.])
-            new_pt = center + shift * new_vec
-            point = tuple(np.round(new_pt, 3))
-            self.G_P_A_aggregated_sorted_shift.append((label, point, arrow))
-        return [pt for _, pt, _ in self.G_P_A_aggregated_sorted_shift]
 
-    def convert_to_planning_shift_time_customized(self, shift = 0.3):
-        self.G_P_A_aggregated_sorted_shift = []
-        for label, center, arrow in self.G_P_A_aggregated_sorted:
-            angle = np.arctan2(arrow[1], arrow[0])
-            new_dir = angle - np.pi/2
-            new_vec = np.array([np.cos(new_dir), np.sin(new_dir), 0.])
-            new_pt = center + shift * new_vec
-            new_pt[2] -= 0.2 # 基于时间导航需要降低高度
-            point = tuple(np.round(new_pt, 3))
-            self.G_P_A_aggregated_sorted_shift.append((label, point, arrow))
-        return [pt for _, pt, _ in self.G_P_A_aggregated_sorted_shift]
-    
 
-    
-    #FF0000
-    def shift_points_bidirectional(self, distance):
+    def convert_to_planning_with_compensate(self, compensate_dict):
 
-        shifted_points = []
-        for label, pt, arrow in self.G_P_A_aggregated_sorted:
-            pt = np.array(pt, dtype=float)
-            arrow = np.array(arrow, dtype=float)
-            norm = np.linalg.norm(arrow)
-            if norm > 1e-8:
-                dir_vec = arrow / norm
-            else:
-                dir_vec = arrow  # 零向量时不移动
+        # 原始数据
+        self.G_P_A_aggregated_sorted
 
-            # 后移：pt - distance * dir_vec
-            back_pt = pt - distance * dir_vec
-            # 前移：pt + distance * dir_vec
-            forth_pt = pt + distance * dir_vec
-
-            shifted_points.append(tuple(back_pt))
-            shifted_points.append(tuple(forth_pt))
-
-        return shifted_points
-
-    # def return_planned_path(self, current_pos):
-
-    #     start = [1, 4, 1] # 起点
-    #     gate_points = self.convert_to_planning()
-
-    #     # 创建路径
-    #     path_points = []
-
-    #     # 第一圈
-    #     path_points.append(current_pos)
-    #     path_points.extend(gate_points)
-    #     path_points.append(start)
+        # 计算补偿后的坐标
+        self.G_P_A_aggregated_sorted_comp = {}
+        for label, (center, arrow) in self.G_P_A_aggregated_sorted.items():
+            if label in compensate_dict:
+                center = np.array(center) + np.array(compensate_dict[label])
+            self.G_P_A_aggregated_sorted_comp[label] = (center, arrow)
         
-    #     # 第二圈
-    #     path_points.extend(gate_points)
-    #     path_points.append(start)
+        # 返回 list 数据
+        items = sorted(
+            self.G_P_A_aggregated_sorted_comp.items(),
+            key=lambda kv: int(kv[0].replace('Gate', ''))
+        )
 
-    #     # 第三圈
-    #     path_points.extend(gate_points)
-    #     path_points.append(start)
+        return [
+            tuple(np.round(center, 3))
+            for _, (center, _) in items
+        ]
 
-    #     # 第四圈
-    #     path_points.extend(gate_points)
-    #     path_points.append(start)
 
-    #     return path_points
-    

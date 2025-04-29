@@ -571,6 +571,11 @@ class CrazyflieInDroneDome(Supervisor):
     # Detect if the drone has reached the gate, if it has set the GOAL object to be transparent
     def check_goal(self, sensor_data):
 
+        # 如果 segment 还没开始走，就直接跳过 #00FF00
+        if self.segment <= 0:
+            return
+        gate_idx = self.segment - 1
+
         # Get the current gate index
         gate_idx = drone.segment - 1
         
@@ -685,6 +690,12 @@ if __name__ == '__main__':
     # seed = 2041385590
     # seed = 2117624179 #00FF00
     # seed = 2117916456 #00FF00
+    # seed = 2124199776
+    # seed = 2125885823
+    # seed = 2126335613 #00FF00
+    # seed = 2126457332
+    # seed = 2127427915 #00FF00
+    # seed + 2127946545 #0000FF 效果极好
 
     # 2) 设置随机种子
     random.seed(seed)
