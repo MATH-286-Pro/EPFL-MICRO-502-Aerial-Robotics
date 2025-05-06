@@ -143,4 +143,6 @@ target_positions.csv
 docs/exercise_2/*.png
 
 
+crazyflie-lib-python
+
 .vscode
