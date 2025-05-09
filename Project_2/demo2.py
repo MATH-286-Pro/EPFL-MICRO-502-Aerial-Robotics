@@ -36,6 +36,8 @@ import time
 from threading import Timer
 import threading
 
+import TOOLS
+
 from pynput import keyboard # Import the keyboard module for key press detection
 
 import cflib.crtp  # noqa
@@ -179,47 +181,44 @@ if __name__ == '__main__':
         time.sleep(0.01)
         
         # 定义单位
-        mm = 0.001
-        cm = 0.01
-        m  = 1
+        second  = 10    #FF0000 注意这个单位定义是不一样的
+        mm = 0.001 # 毫米
+        cm = 0.01  # 厘米
+        m  = 1     # 米
 
         # 定义飞行参数
-        HOVER_HEIGHT = 6*cm  
+        TIME_TAKE_OFF = 2*second
+        TIME_LAND     = 2*second
+        HOVER_HEIGHT  = 25*cm  
 
         # 定义经验参数
-        SPEED_GAIN = 1
+        SPEED_GAIN = 5
 
-        # Take-off
-        for y in range(10):
-            cf.commander.send_hover_setpoint(0, 0, 0, y/10 * HOVER_HEIGHT)
-            time.sleep(0.1)
-        for _ in range(20):
-            cf.commander.send_hover_setpoint(0, 0, 0, HOVER_HEIGHT)
-            time.sleep(0.1)
+        # 起飞
+        TOOLS.FLY_or_LAND(cf, 'takeoff', HOVER_HEIGHT, TIME_TAKE_OFF)
 
         # Move q
-        for _ in range(50):                                                            # 速度指令 (vx, vy, yawrate, zdistance)
-            cf.commander.send_hover_setpoint(+5*cm * SPEED_GAIN, 0, 0, HOVER_HEIGHT)   # (0, 0, 0, 0.4)
-            time.sleep(0.1)
-        for _ in range(50):                                                            # 速度指令 (vx, vy, yawrate, zdistance)
-            cf.commander.send_hover_setpoint(-5*cm * SPEED_GAIN, 0, 0, HOVER_HEIGHT)   # (0, 0, 0, 0.4)
+        # for _ in range(50):                                                            # 速度指令 (vx, vy, yawrate, zdistance)
+        #     cf.commander.send_hover_setpoint(+5*cm * SPEED_GAIN, 0, 0, HOVER_HEIGHT)   # (0, 0, 0, 0.4)
+        #     time.sleep(0.1)
+        # for _ in range(50):                                                            # 速度指令 (vx, vy, yawrate, zdistance)
+        #     cf.commander.send_hover_setpoint(-5*cm * SPEED_GAIN, 0, 0, HOVER_HEIGHT)   # (0, 0, 0, 0.4)
+        #     time.sleep(0.1)
+
+        for _ in range(50):
+            cf.commander.send_position_setpoint(0,0,HOVER_HEIGHT,0)
             time.sleep(0.1)
 
-        # Land
-        for _ in range(20):
-            cf.commander.send_hover_setpoint(0, 0, 0, HOVER_HEIGHT)
-            time.sleep(0.1)
-        for y in range(10):
-            cf.commander.send_hover_setpoint(0, 0, 0, (10 - y)/10 * HOVER_HEIGHT)
+        for _ in range(50):
+            cf.commander.send_position_setpoint(0,-0.6*m,HOVER_HEIGHT,0)
             time.sleep(0.1)
 
-        cf.commander.send_stop_setpoint()
+        for _ in range(50):
+            cf.commander.send_position_setpoint(0,0,HOVER_HEIGHT,0)
+            time.sleep(0.1)
 
-        # 自动重连
-        cf.close_link() # 断开链接
-        time.sleep(1)   # 等待1秒
-        ps = power_switch.PowerSwitch(uri)
-        ps.stm_power_cycle()
-        ps.close()
+        # 降落
+        TOOLS.FLY_or_LAND(cf, 'land', HOVER_HEIGHT, TIME_LAND)
+        TOOLS.auto_reconnect(cf, uri)
         
         break
