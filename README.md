@@ -21,10 +21,27 @@ https://github.com/user-attachments/assets/74ce3f74-0939-41c1-b5f0-324baa804558
 
 
 ## **硬件项目 Hardware Project**
+```python
+# crayflie-lib-python/commander.py 文件说明
 
+# 盘旋命令 控制 vx vy yawrate z
+def send_hover_setpoint(self, vx, vy, yawrate, zdistance):
+
+# 位置控制命令 ⭐
+def send_position_setpoint(self, x, y, z, yaw):
+
+# 完全控制命令 
+def send_full_state_setpoint(self, pos, vel, acc, orientation, rollrate, pitchrate, yawrate):
+
+```
 
 
 ## **项目日志 Project Log**
 - **2025.4.27 周日**
   - 删除无用变量与函数
   - 修改正弦扫描模式为匀速扫描
+- **2025.5.9 周五**
+  - 无人机连接到 Lighthouse
+  - 发现无人机自动数据融合光流计和红外传感器，计算位置数据
+  - 发现无人机飞行不稳定时，需要查看 lighthouse 是否在飘
+

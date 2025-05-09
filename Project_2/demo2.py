@@ -41,7 +41,7 @@ from pynput import keyboard # Import the keyboard module for key press detection
 import cflib.crtp  # noqa
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
-from cflib.utils import uri_helper
+from cflib.utils import uri_helper, power_switch
 
 #0000FF TODO: CHANGE THIS URI TO YOUR CRAZYFLIE & YOUR RADIO CHANNEL
 uri = uri_helper.uri_from_env(default='radio://0/30/2M/E7E7E7E713')
@@ -187,7 +187,7 @@ if __name__ == '__main__':
         HOVER_HEIGHT = 6*cm  
 
         # 定义经验参数
-        SPEED_GAIN = 0.1
+        SPEED_GAIN = 1
 
         # Take-off
         for y in range(10):
@@ -214,4 +214,12 @@ if __name__ == '__main__':
             time.sleep(0.1)
 
         cf.commander.send_stop_setpoint()
+
+        # 自动重连
+        cf.close_link() # 断开链接
+        time.sleep(1)   # 等待1秒
+        ps = power_switch.PowerSwitch(uri)
+        ps.stm_power_cycle()
+        ps.close()
+        
         break
