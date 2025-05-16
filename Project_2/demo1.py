@@ -82,6 +82,11 @@ class LoggingExample:
         self.sample_count = 0
         self.start_time = None
 
+        # Add CSV file handling
+        self.csv_file = open('position_records.csv', 'w')
+        self.csv_file.write('gate_number,avg_x,avg_y,avg_z,avg_yaw\n')
+        self.recording_count = 0
+
         # Setup keyboard listener
         self.listener = keyboard.Listener(on_press=self._on_press)
         self.listener.start()
@@ -131,7 +136,7 @@ class LoggingExample:
             print('Could not add Stabilizer log config, bad configuration.')
 
         # Start a timer to disconnect in 10s
-        t = Timer(10, self._cf.close_link)
+        t = Timer(60, self._cf.close_link)
         t.start()
 
     def _stab_log_error(self, logconf, msg):
@@ -160,6 +165,11 @@ class LoggingExample:
             avg_y = self.position_sum['y'] / self.sample_count
             avg_z = self.position_sum['z'] / self.sample_count
             avg_yaw = self.position_sum['yaw'] / self.sample_count
+            
+            # Increment recording count and save to CSV
+            self.recording_count += 1
+            self.csv_file.write(f'{self.recording_count},{avg_x:.3f},{avg_y:.3f},{avg_z:.3f},{avg_yaw:.3f}\n')
+            self.csv_file.flush()
             
             print("\n=== Average Position over 5 seconds ===")
             print(f"X: {avg_x:3.3f} m")
@@ -194,6 +204,9 @@ class LoggingExample:
         print('Disconnected from %s' % link_uri)
         self.is_connected = False
 
+        print('Disconnected from %s' % link_uri)
+        if hasattr(self, 'csv_file'):
+            self.csv_file.close()
         if hasattr(self, 'listener'):
             self.listener.stop()
 
