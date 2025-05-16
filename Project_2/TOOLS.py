@@ -41,14 +41,14 @@ def FLY_or_LAND(cf: Crazyflie,
 def position_smooth_change(cf: Crazyflie,
                            start_pos:list,
                            end_pos:  list,
-                           time:     int,):
+                           TIME:     int,):
     
     start_pos = np.array(start_pos)
     end_pos   = np.array(end_pos)
-    pos_smooth_list = np.linspace(start_pos, end_pos, time)
+    pos_smooth_list = np.linspace(start_pos, end_pos, TIME)
     
-    for i in range(time):
-        cf.commander.send_hover_setpoint(pos_smooth_list[i][0],
+    for i in range(TIME):
+        cf.commander.send_position_setpoint(pos_smooth_list[i][0],
                                          pos_smooth_list[i][1],
                                          pos_smooth_list[i][2],
                                          pos_smooth_list[i][3])
