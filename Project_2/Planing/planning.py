@@ -18,6 +18,7 @@ class MotionPlanner3D():
         self.DEBUG = DEBUG
 
         self.trajectory_setpoints = None
+        self.time_setpoints       = None
         obstacles = None
 
         self.init_params(self.path)
@@ -184,8 +185,11 @@ class MotionPlanner3D():
             a_y_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[2],coeff_y[seg_idx*6:(seg_idx+1)*6])
             a_z_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[2],coeff_z[seg_idx*6:(seg_idx+1)*6])
 
-        yaw_vals = np.zeros((self.disc_steps*len(self.times),1))
-        trajectory_setpoints = np.hstack((x_vals, y_vals, z_vals, yaw_vals))
+        #0000FF 计算 YAW 轴
+        yaw_vals = np.zeros((self.disc_steps*len(self.times),1))             #0000FF 
+        yaw_vals = np.arctan2(v_y_vals, v_x_vals)  # (N×1) 矩阵
+
+        trajectory_setpoints = np.hstack((x_vals, y_vals, z_vals, yaw_vals)) #0000FF
 
         if self.DEBUG:
             self.plot(obs, path_waypoints, trajectory_setpoints)
@@ -215,36 +219,102 @@ class MotionPlanner3D():
         
         ax.add_collection3d(Poly3DCollection(faces, color=color, alpha=alpha))
     
-    def plot(self, obs, path_waypoints, trajectory_setpoints):
+    # def plot(self, obs, path_waypoints, trajectory_setpoints):
 
-        # Plot 3D trajectory
+    #     # Plot 3D trajectory
+    #     fig = plt.figure(figsize=(8, 6))
+    #     ax = fig.add_subplot(111, projection='3d')
+
+    #     if obs is not None:
+    #         for ob in obs:
+    #             self.plot_obstacle(ax, ob[0], ob[1], ob[2], ob[3], ob[4], ob[5])
+
+    #     ax.plot(trajectory_setpoints[:,0], trajectory_setpoints[:,1], trajectory_setpoints[:,2], label="Minimum-Jerk Trajectory", linewidth=2)
+    #     ax.set_xlim(-2.0, +3.0)
+    #     ax.set_ylim(-1.5, +2.0)
+    #     ax.set_zlim(0, 4)
+
+    #     # Plot waypoints
+    #     waypoints_x = [p[0] for p in path_waypoints]
+    #     waypoints_y = [p[1] for p in path_waypoints]
+    #     waypoints_z = [p[2] for p in path_waypoints]
+    #     ax.scatter(waypoints_x, waypoints_y, waypoints_z, color='red', marker='o', label="Waypoints")
+
+    #     # Labels and legend
+    #     ax.set_xlabel("X Position")
+    #     ax.set_ylabel("Y Position")
+    #     ax.set_zlabel("Z Position")
+    #     ax.set_title("3D Motion planning trajectories")
+    #     ax.legend()
+
+    #     # 俯视图：elev=90（俯视），azim= -90(调整朝向，可根据需要改成0、180等)
+    #     ax.view_init(elev=90, azim=90)
+
+    #     plt.show()
+
+    def plot(self, obs, path_waypoints, trajectory_setpoints):
+        # 创建 figure 和 ax
         fig = plt.figure(figsize=(8, 6))
         ax = fig.add_subplot(111, projection='3d')
 
+        # （如果有障碍物的话）画障碍物
         if obs is not None:
             for ob in obs:
                 self.plot_obstacle(ax, ob[0], ob[1], ob[2], ob[3], ob[4], ob[5])
 
-        ax.plot(trajectory_setpoints[:,0], trajectory_setpoints[:,1], trajectory_setpoints[:,2], label="Minimum-Jerk Trajectory", linewidth=2)
-        ax.set_xlim(-2.0, +3.0)
-        ax.set_ylim(-1.5, +2.0)
-        ax.set_zlim(0, 4)
+        # 画最小劲度轨迹
+        ax.plot(
+            trajectory_setpoints[:,0],
+            trajectory_setpoints[:,1],
+            trajectory_setpoints[:,2],
+            label="Minimum-Jerk Trajectory",
+            linewidth=2
+        )
 
-        # Plot waypoints
+        # 画路径点
         waypoints_x = [p[0] for p in path_waypoints]
         waypoints_y = [p[1] for p in path_waypoints]
         waypoints_z = [p[2] for p in path_waypoints]
-        ax.scatter(waypoints_x, waypoints_y, waypoints_z, color='red', marker='o', label="Waypoints")
+        ax.scatter(
+            waypoints_x, waypoints_y, waypoints_z,
+            color='red', marker='o', label="Waypoints"
+        )
 
-        # Labels and legend
+        # ——在这里加箭头——
+        skip = 10        # 每隔多少个点画一个箭头
+        arrow_len = 0.2  # 箭头长度
+        xs = trajectory_setpoints[:,0]
+        ys = trajectory_setpoints[:,1]
+        zs = trajectory_setpoints[:,2]
+        yaws = trajectory_setpoints[:,3]
+
+        for i in range(0, len(xs), skip):
+            x, y, z, yaw = xs[i], ys[i], zs[i], yaws[i]
+            dx = np.cos(yaw)
+            dy = np.sin(yaw)
+            dz = 0
+            ax.quiver(
+                x, y, z,         # 起点
+                dx, dy, dz,      # 方向
+                length=arrow_len,
+                # normalize=True,
+                arrow_length_ratio=0.4,  # 头部占 40%
+                pivot='tail',            # 箭尾在 (x,y,z)
+                linewidth=1,
+                color='black'
+            )
+
+        # 设置坐标轴范围、标签、图例
+        ax.set_xlim(-2.0, +3.0)
+        ax.set_ylim(-1.5, +2.0)
+        ax.set_zlim(0, 4)
         ax.set_xlabel("X Position")
         ax.set_ylabel("Y Position")
         ax.set_zlabel("Z Position")
         ax.set_title("3D Motion planning trajectories")
         ax.legend()
 
-        # 俯视图：elev=90（俯视），azim= -90(调整朝向，可根据需要改成0、180等)
+        # 俯视视角
         ax.view_init(elev=90, azim=90)
 
         plt.show()
-

@@ -12,6 +12,8 @@ from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.utils import uri_helper, power_switch
 
+import numpy as np
+
 
 # 封装原地起飞/降落指令
 def FLY_or_LAND(cf: Crazyflie, 
@@ -35,6 +37,25 @@ def FLY_or_LAND(cf: Crazyflie,
             cf.commander.send_hover_setpoint(0,0,0, (TIME - y)/TIME * HEIGHT)
             time.sleep(0.1)
         cf.commander.send_stop_setpoint()
+
+def position_smooth_change(cf: Crazyflie,
+                           start_pos:list,
+                           end_pos:  list,
+                           time:     int,):
+    
+    start_pos = np.array(start_pos)
+    end_pos   = np.array(end_pos)
+    pos_smooth_list = np.linspace(start_pos, end_pos, time)
+    
+    for i in range(time):
+        cf.commander.send_hover_setpoint(pos_smooth_list[i][0],
+                                         pos_smooth_list[i][1],
+                                         pos_smooth_list[i][2],
+                                         pos_smooth_list[i][3])
+        time.sleep(0.1)
+    
+
+    
 
 
 # 自动重连，解决需要手动上电问题

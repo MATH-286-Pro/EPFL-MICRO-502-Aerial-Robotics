@@ -44,8 +44,7 @@ import cflib.crtp  # noqa
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.utils import uri_helper, power_switch
-from Planing import planning
-
+from Planing.planning import MotionPlanner3D
 #0000FF TODO: CHANGE THIS URI TO YOUR CRAZYFLIE & YOUR RADIO CHANNEL
 uri = uri_helper.uri_from_env(default='radio://0/30/2M/E7E7E7E713')
 
@@ -192,31 +191,46 @@ if __name__ == '__main__':
         TIME_LAND     = 2*second
         HOVER_HEIGHT  = 25*cm  
 
+        TARGET_POINTS = [[0.0, 0.0, HOVER_HEIGHT],
+                        [+0.3, -0.3, HOVER_HEIGHT],
+                        [+0.8, 0.0, HOVER_HEIGHT],
+                        [+0.3, +0.3, HOVER_HEIGHT],
+                        [0.0, 0.0, HOVER_HEIGHT]
+                        ]   
+        
+        planner = MotionPlanner3D(path = TARGET_POINTS)
+
+
         # 定义经验参数
         SPEED_GAIN = 5
 
         # 起飞
         TOOLS.FLY_or_LAND(cf, 'takeoff', HOVER_HEIGHT, TIME_TAKE_OFF)
 
-        # Move q
-        # for _ in range(50):                                                            # 速度指令 (vx, vy, yawrate, zdistance)
-        #     cf.commander.send_hover_setpoint(+5*cm * SPEED_GAIN, 0, 0, HOVER_HEIGHT)   # (0, 0, 0, 0.4)
+        # 转向到目标
+        TOOLS.position_smooth_change(cf, 
+                                     [0, 0, HOVER_HEIGHT, 0], 
+                                     planner.trajectory_setpoints[0], 
+                                     5*second)
+
+        for index in range(len(planner.trajectory_setpoints)):
+            cf.commander.send_position_setpoint(planner.trajectory_setpoints[index][0],
+                                                planner.trajectory_setpoints[index][1],
+                                                planner.trajectory_setpoints[index][2],
+                                                planner.trajectory_setpoints[index][3])
+            time.sleep(0.1)
+
+        # for _ in range(50):
+        #     cf.commander.send_position_setpoint(0,0,HOVER_HEIGHT,0)
         #     time.sleep(0.1)
-        # for _ in range(50):                                                            # 速度指令 (vx, vy, yawrate, zdistance)
-        #     cf.commander.send_hover_setpoint(-5*cm * SPEED_GAIN, 0, 0, HOVER_HEIGHT)   # (0, 0, 0, 0.4)
+
+        # for _ in range(50):
+        #     cf.commander.send_position_setpoint(0,-0.6*m,HOVER_HEIGHT,0)
         #     time.sleep(0.1)
 
-        for _ in range(50):
-            cf.commander.send_position_setpoint(0,0,HOVER_HEIGHT,0)
-            time.sleep(0.1)
-
-        for _ in range(50):
-            cf.commander.send_position_setpoint(0,-0.6*m,HOVER_HEIGHT,0)
-            time.sleep(0.1)
-
-        for _ in range(50):
-            cf.commander.send_position_setpoint(0,0,HOVER_HEIGHT,0)
-            time.sleep(0.1)
+        # for _ in range(50):
+        #     cf.commander.send_position_setpoint(0,0,HOVER_HEIGHT,0)
+        #     time.sleep(0.1)
 
         # 降落
         TOOLS.FLY_or_LAND(cf, 'land', HOVER_HEIGHT, TIME_LAND)
