@@ -95,20 +95,19 @@ if __name__ == '__main__':
         cm = 0.01  # 厘米
         m  = 1     # 米
 
+        ##################################################### 飞行数据 #####################################################
+
         # 定义飞行参数
         TIME_TAKE_OFF = 2*second
         TIME_LAND     = 2*second
-        HOVER_HEIGHT  = 25*cm  
-
-        TARGET_POINTS = [[0.0, 0.0, HOVER_HEIGHT],
-                        [+1.18*m, -0.30*m, 0.734*m],
-                        [+1.70*m, +0.10*m, 0.734*m],
-                        [+1.04*m, +0.70*m, 0.734*m],
-                        [0.0, 0.0, HOVER_HEIGHT]
-                        ]  
-
+        HOVER_HEIGHT  = 30*cm  
+        
+        # 定义飞行轨迹
+        Trajectory = TOOLS.Trajectory_Class('position_records.csv', HOVER_HEIGHT)
+        TARGET_POINTS = Trajectory.point_list
         planner = MotionPlanner3D(path = TARGET_POINTS)
 
+        ##################################################### 控制部分 #####################################################
 
         # 起飞
         TOOLS.FLY_or_LAND(cf, 'takeoff', HOVER_HEIGHT, TIME_TAKE_OFF)
@@ -119,12 +118,12 @@ if __name__ == '__main__':
         #                              planner.trajectory_setpoints[1], 
         #                              1*second)
 
-        # for index in range(1,len(planner.trajectory_setpoints)):
-        #     cf.commander.send_position_setpoint(planner.trajectory_setpoints[index][0],
-        #                                         planner.trajectory_setpoints[index][1],
-        #                                         planner.trajectory_setpoints[index][2],
-        #                                         0) # 关闭 Yaw 轴控制
-        #     time.sleep(0.1)
+        for index in range(1,len(planner.trajectory_setpoints)):
+            cf.commander.send_position_setpoint(planner.trajectory_setpoints[index][0],
+                                                planner.trajectory_setpoints[index][1],
+                                                planner.trajectory_setpoints[index][2],
+                                                0) # 关闭 Yaw 轴控制
+            time.sleep(0.1)
 
         # 降落
         TOOLS.FLY_or_LAND(cf, 'land', HOVER_HEIGHT, TIME_LAND)
