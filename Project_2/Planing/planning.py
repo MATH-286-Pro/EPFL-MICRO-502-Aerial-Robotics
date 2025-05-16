@@ -187,7 +187,7 @@ class MotionPlanner3D():
 
         #0000FF 计算 YAW 轴
         yaw_vals = np.zeros((self.disc_steps*len(self.times),1))             #0000FF 
-        # yaw_vals = np.arctan2(v_y_vals, v_x_vals)  # (N×1) 矩阵
+        yaw_vals = np.arctan2(v_y_vals, v_x_vals)  # (N×1) 矩阵
         yaw_vals = np.rad2deg(yaw_vals)  # 转换为角度
 
         trajectory_setpoints = np.hstack((x_vals, y_vals, z_vals, yaw_vals)) #0000FF

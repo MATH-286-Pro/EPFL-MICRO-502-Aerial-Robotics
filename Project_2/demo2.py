@@ -52,97 +52,6 @@ uri = uri_helper.uri_from_env(default='radio://0/30/2M/E7E7E7E713')
 logging.basicConfig(level=logging.ERROR)
 
 
-class LoggingExample:
-    """
-    Simple logging example class that logs the Stabilizer from a supplied
-    link uri and disconnects after 10s.
-    """
-
-    def __init__(self, link_uri):
-        """ Initialize and run the example with the specified link_uri """
-
-        self._cf = Crazyflie(rw_cache='./cache')
-
-        # Connect some callbacks from the Crazyflie API
-        self._cf.connected.add_callback(self._connected)
-        self._cf.disconnected.add_callback(self._disconnected)
-        self._cf.connection_failed.add_callback(self._connection_failed)
-        self._cf.connection_lost.add_callback(self._connection_lost)
-
-        print('Connecting to %s' % link_uri)
-
-        # Try to connect to the Crazyflie
-        self._cf.open_link(link_uri)
-
-        # Variable used to keep main loop occupied until disconnect
-        self.is_connected = True
-
-    def _connected(self, link_uri):
-        """ This callback is called form the Crazyflie API when a Crazyflie
-        has been connected and the TOCs have been downloaded."""
-        print('Connected to %s' % link_uri)
-
-        # The definition of the logconfig can be made before connecting
-        self._lg_stab = LogConfig(name='Stabilizer', period_in_ms=50)
-        self._lg_stab.add_variable('stateEstimate.x', 'float')
-        self._lg_stab.add_variable('stateEstimate.y', 'float')
-        self._lg_stab.add_variable('stateEstimate.z', 'float')
-        self._lg_stab.add_variable('stabilizer.yaw', 'float')
-
-        # The fetch-as argument can be set to FP16 to save space in the log packet
-        # self._lg_stab.add_variable('pm.vbat', 'FP16')
-
-        # Adding the configuration cannot be done until a Crazyflie is
-        # connected, since we need to check that the variables we
-        # would like to log are in the TOC.
-        try:
-            self._cf.log.add_config(self._lg_stab)
-            # This callback will receive the data
-            self._lg_stab.data_received_cb.add_callback(self._stab_log_data)
-            # This callback will be called on errors
-            self._lg_stab.error_cb.add_callback(self._stab_log_error)
-            # Start the logging
-            self._lg_stab.start()
-        except KeyError as e:
-            print('Could not start log configuration,'
-                  '{} not found in TOC'.format(str(e)))
-        except AttributeError:
-            print('Could not add Stabilizer log config, bad configuration.')
-
-        # Start a timer to disconnect in 50s     #0000FF TODO: CHANGE THIS TO YOUR NEEDS
-        t = Timer(50, self._cf.close_link)
-        t.start()
-
-    def _stab_log_error(self, logconf, msg):
-        """Callback from the log API when an error occurs"""
-        print('Error when logging %s: %s' % (logconf.name, msg))
-
-    def _stab_log_data(self, timestamp, data, logconf):
-        """Callback from a the log API when data arrives"""
-
-        # Print the data to the console
-        # print(f'[{timestamp}][{logconf.name}]: ', end='')
-        # for name, value in data.items():
-        #     print(f'{name}: {value:3.3f} ', end='')
-        # print()
-
-    def _connection_failed(self, link_uri, msg):
-        """Callback when connection initial connection fails (i.e no Crazyflie
-        at the specified address)"""
-        print('Connection to %s failed: %s' % (link_uri, msg))
-        self.is_connected = False
-
-    def _connection_lost(self, link_uri, msg):
-        """Callback when disconnected after a connection has been made (i.e
-        Crazyflie moves out of range)"""
-        print('Connection to %s lost: %s' % (link_uri, msg))
-
-    def _disconnected(self, link_uri):
-        """Callback when the Crazyflie is disconnected (called in all cases)"""
-        print('Disconnected from %s' % link_uri)
-        self.is_connected = False
-
-
 # Define your custom callback function
 def emergency_stop_callback(cf):
     def on_press(key):
@@ -163,7 +72,7 @@ if __name__ == '__main__':
     # Initialize the low-level drivers
     cflib.crtp.init_drivers()
 
-    le = LoggingExample(uri)
+    le = TOOLS.LoggingExample(uri)
     cf = le._cf
 
     cf.param.set_value('kalman.resetEstimation', '1')
@@ -193,59 +102,30 @@ if __name__ == '__main__':
 
         TARGET_POINTS = [[0.0, 0.0, HOVER_HEIGHT],
                         [+1.18*m, -0.30*m, 0.734*m],
-                        # [+1.8*m, -0.46*m, 0.75*m],
-                        # [+1.66*m, +0.3*m, 0.75*m],
-                        [1.7*m,0.1*m, 0.734*m],
-                        [+1.04*m, +0.7*m, 0.734*m],
+                        [+1.70*m, +0.10*m, 0.734*m],
+                        [+1.04*m, +0.70*m, 0.734*m],
                         [0.0, 0.0, HOVER_HEIGHT]
                         ]  
 
-        
         planner = MotionPlanner3D(path = TARGET_POINTS)
 
 
-        # 定义经验参数
-        SPEED_GAIN = 5
-
-        # 起飞q
+        # 起飞
         TOOLS.FLY_or_LAND(cf, 'takeoff', HOVER_HEIGHT, TIME_TAKE_OFF)
 
-        # 转向到目标
-        TOOLS.position_smooth_change(cf, 
-                                     [0, 0, HOVER_HEIGHT, 0], 
-                                     planner.trajectory_setpoints[1], 
-                                     1*second)
+        # # 转向到目标
+        # TOOLS.position_smooth_change(cf, 
+        #                              [0, 0, HOVER_HEIGHT, 0], 
+        #                              planner.trajectory_setpoints[1], 
+        #                              1*second)
 
-        for index in range(1,len(planner.trajectory_setpoints)):
-            cf.commander.send_position_setpoint(planner.trajectory_setpoints[index][0],
-                                                planner.trajectory_setpoints[index][1],
-                                                planner.trajectory_setpoints[index][2],
-                                                planner.trajectory_setpoints[index][3])
-            time.sleep(0.1)
-
-        # for _ in range(50):
-        #     cf.commander.send_position_setpoint(0,0,HOVER_HEIGHT,0)
+        # for index in range(1,len(planner.trajectory_setpoints)):
+        #     cf.commander.send_position_setpoint(planner.trajectory_setpoints[index][0],
+        #                                         planner.trajectory_setpoints[index][1],
+        #                                         planner.trajectory_setpoints[index][2],
+        #                                         0) # 关闭 Yaw 轴控制
         #     time.sleep(0.1)
 
-        # for _ in range(50):
-        #     cf.commander.send_position_setpoint(0,-0.6*m,HOVER_HEIGHT,0)
-        #     time.sleep(0.1)
-
-        # for _ in range(50):
-        #     cf.commander.send_position_setpoint(0,0,HOVER_HEIGHT,0)
-        #     time.sleep(0.1)
-
-        # for _ in range(50):
-        #     cf.commander.send_position_setpoint(0,-0.6*m,HOVER_HEIGHT,0)
-        #     time.sleep(0.1)
-
-        # for _ in range(50):
-        #     cf.commander.send_position_setpoint(0,0,HOVER_HEIGHT,0)
-        #     time.sleep(0.1)
-
-        # for _ in range(50):
-        #     cf.commander.send_position_setpoint(0,0,0,0)
-        #     time.sleep(0.1)
         # 降落
         TOOLS.FLY_or_LAND(cf, 'land', HOVER_HEIGHT, TIME_LAND)
         TOOLS.auto_reconnect(cf, uri)
