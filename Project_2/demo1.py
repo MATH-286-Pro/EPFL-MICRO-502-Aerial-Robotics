@@ -34,6 +34,8 @@ from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.utils import uri_helper
 
+from pynput import keyboard
+
 #0000FF TODO: CHANGE THIS URI TO YOUR CRAZYFLIE & YOUR RADIO CHANNEL
 """
 Each drone has a unique address for communication between your laptop and the drone. 
@@ -73,6 +75,28 @@ class LoggingExample:
 
         # Variable used to keep main loop occupied until disconnect
         self.is_connected = True
+
+        # Add position tracking variables
+        self.recording = False
+        self.position_sum = {'x': 0.0, 'y': 0.0, 'z': 0.0, 'yaw': 0.0}
+        self.sample_count = 0
+        self.start_time = None
+
+        # Setup keyboard listener
+        self.listener = keyboard.Listener(on_press=self._on_press)
+        self.listener.start()
+
+    def _on_press(self, key):
+        """Callback for keyboard press"""
+        try:
+            if key.char == 'k' and not self.recording:
+                print("\nStarted recording position for 5 seconds...")
+                self.recording = True
+                self.position_sum = {'x': 0.0, 'y': 0.0, 'z': 0.0, 'yaw': 0.0}
+                self.sample_count = 0
+                self.start_time = time.time()
+        except AttributeError:
+            pass
 
     def _connected(self, link_uri):
         """ This callback is called form the Crazyflie API when a Crazyflie
@@ -115,6 +139,39 @@ class LoggingExample:
         print('Error when logging %s: %s' % (logconf.name, msg))
 
     def _stab_log_data(self, timestamp, data, logconf):
+        if not self.recording:
+            return
+        
+        current_time = time.time()
+        elapsed_time = current_time - self.start_time
+
+        if elapsed_time <= 3.0:
+            # Collect data during 5 second window
+            self.position_sum['x'] += data['stateEstimate.x']
+            self.position_sum['y'] += data['stateEstimate.y']
+            self.position_sum['z'] += data['stateEstimate.z']
+            self.position_sum['yaw'] += data['stabilizer.yaw']
+            self.sample_count += 1
+            print(f'Recording: {elapsed_time:.1f}s', end='\r')
+        
+        elif self.recording:  # Only calculate average once
+            # Calculate and display averages
+            avg_x = self.position_sum['x'] / self.sample_count
+            avg_y = self.position_sum['y'] / self.sample_count
+            avg_z = self.position_sum['z'] / self.sample_count
+            avg_yaw = self.position_sum['yaw'] / self.sample_count
+            
+            print("\n=== Average Position over 5 seconds ===")
+            print(f"X: {avg_x:3.3f} m")
+            print(f"Y: {avg_y:3.3f} m")
+            print(f"Z: {avg_z:3.3f} m")
+            print(f"Yaw: {avg_yaw:3.3f} degrees")
+            print(f"Samples collected: {self.sample_count}")
+            print("=======================================\n")
+            
+            # Reset recording state
+            self.recording = False
+
         """Callback from a the log API when data arrives"""
         print(f'[{timestamp}][{logconf.name}]: ', end='')
         for name, value in data.items():
@@ -136,6 +193,9 @@ class LoggingExample:
         """Callback when the Crazyflie is disconnected (called in all cases)"""
         print('Disconnected from %s' % link_uri)
         self.is_connected = False
+
+        if hasattr(self, 'listener'):
+            self.listener.stop()
 
 
 if __name__ == '__main__':
