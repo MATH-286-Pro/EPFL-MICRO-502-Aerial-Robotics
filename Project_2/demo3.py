@@ -41,7 +41,7 @@ from pynput import keyboard # Import the keyboard module for key press detection
 import cflib.crtp  # noqa
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
-from cflib.utils import uri_helper
+from cflib.utils import uri_helper, power_switch
 
 #0000FF TODO: CHANGE THIS URI TO YOUR CRAZYFLIE & YOUR RADIO CHANNEL
 uri = uri_helper.uri_from_env(default='radio://0/30/2M/E7E7E7E713')
@@ -184,14 +184,17 @@ if __name__ == '__main__':
         m  = 1
 
         # 定义飞行参数
-        HOVER_HEIGHT = 6*cm  
+        HOVER_HEIGHT = 75.6*cm  
+        gate_x = 1.18* m
+        gate_y = -0.535* m
+        gate_z = 75.6*cm 
 
         # 定义经验参数
-        SPEED_GAIN = 2
+        SPEED_GAIN = 1
 
         # Take-off
-        for y in range(10):
-            cf.commander.send_hover_setpoint(0, 0, 0, y/10 * HOVER_HEIGHT)
+        for y in range(20):
+            cf.commander.send_hover_setpoint(0, 0, 0, y/20 * HOVER_HEIGHT)
             time.sleep(0.1)
         for _ in range(20):
             cf.commander.send_hover_setpoint(0, 0, 0, HOVER_HEIGHT)
@@ -199,19 +202,31 @@ if __name__ == '__main__':
 
         # Move q
         for _ in range(50):                                                            # 速度指令 (vx, vy, yawrate, zdistance)
-            cf.commander.send_hover_setpoint(+5*cm * SPEED_GAIN, 0, 0, HOVER_HEIGHT)   # (0, 0, 0, 0.4)
+            cf.commander.send_position_setpoint(gate_x,gate_y,HOVER_HEIGHT,0)   # (0, 0, 0, 0.4)
             time.sleep(0.1)
-        for _ in range(50):                                                            # 速度指令 (vx, vy, yawrate, zdistance)
-            cf.commander.send_hover_setpoint(-5*cm * SPEED_GAIN, 0, 0, HOVER_HEIGHT)   # (0, 0, 0, 0.4)
+        # for _ in range(50):                                                            # 速度指令 (vx, vy, yawrate, zdistance)
+        #     cf.commander.send_hover_setpoint(-5*cm * SPEED_GAIN, 0, 0, HOVER_HEIGHT)   # (0, 0, 0, 0.4)
+        #     time.sleep(0.1)
+
+        for _ in range(30):                                                            # 速度指令 (vx, vy, yawrate, zdistance)
+            cf.commander.send_position_setpoint(0,0,HOVER_HEIGHT,0)
             time.sleep(0.1)
 
         # Land
         for _ in range(20):
             cf.commander.send_hover_setpoint(0, 0, 0, HOVER_HEIGHT)
             time.sleep(0.1)
-        for y in range(10):
-            cf.commander.send_hover_setpoint(0, 0, 0, (10 - y)/10 * HOVER_HEIGHT)
+        for y in range(20):
+            cf.commander.send_hover_setpoint(0, 0, 0, (20 - y)/20 * HOVER_HEIGHT)
             time.sleep(0.1)
 
         cf.commander.send_stop_setpoint()
+
+        cf.close_link()  # Close the link to the Crazyflie
+        time.sleep(1)
+        
+        ps = power_switch.PowerSwitch(uri)
+        ps.stm_power_cycle()
+        ps.close()
+
         break
