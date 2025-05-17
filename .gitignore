@@ -145,4 +145,7 @@ docs/exercise_2/*.png
 
 crazyflie-lib-python
 
-.vscode
+cache
+
+Project_2/test.py
+position_records.csv
