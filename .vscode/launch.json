@@ -9,8 +9,8 @@
             "name": "Python Debugger: main.py",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
-            // "program": "${workspaceFolder}/controllers/main/main.py",
+            // "program": "${file}",
+            "program": "${workspaceFolder}/Project_1/controllers/main/main.py",
             "console": "integratedTerminal",
             "envFile": "${workspaceFolder}/.env"
         }
