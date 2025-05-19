@@ -94,7 +94,7 @@ class LoggingExample:
         # for name, value in data.items():
         #     print(f'{name}: {value:3.3f} ', end='')
         # print()
-
+        #0000FF 数据记录
         for name, value in data.items():
             self.position[name] = value
         

@@ -37,6 +37,7 @@ from threading import Timer
 import threading
 
 import TOOLS
+import pandas as pd
 
 from pynput import keyboard # Import the keyboard module for key press detection
 
@@ -50,6 +51,17 @@ uri = uri_helper.uri_from_env(default='radio://0/30/2M/E7E7E7E713')
 
 # Only output errors from the logging framework
 logging.basicConfig(level=logging.ERROR)
+
+
+# 定义收集定位函数
+def record_position(le,flight_log)->None:
+    pos = le.position
+    flight_log.append([
+        pos.get('stateEstimate.x', 0),
+        pos.get('stateEstimate.y', 0),
+        pos.get('stateEstimate.z', 0),
+        pos.get('stateEstimate.yaw', 0),
+    ])
 
 
 # Define your custom callback function
@@ -84,6 +96,10 @@ if __name__ == '__main__':
     emergency_stop_thread = threading.Thread(target=emergency_stop_callback, args=(cf,))
     emergency_stop_thread.start()
 
+    #00FF00 添加测试代码
+    flight_log = [] # 用于记录无人机位置
+
+
     #0000FF TODO : CHANGE THIS TO YOUR NEEDS
     print("Starting control")
     while le.is_connected:
@@ -109,24 +125,31 @@ if __name__ == '__main__':
 
         ##################################################### 控制部分 #####################################################
 
-        # 起飞
-        TOOLS.FLY_or_LAND(cf, 'takeoff', HOVER_HEIGHT, TIME_TAKE_OFF)
-
-        # # 转向到目标
-        # TOOLS.position_smooth_change(cf, 
-        #                              [0, 0, HOVER_HEIGHT, 0], 
-        #                              planner.trajectory_setpoints[1], 
-        #                              1*second)
-
-        for index in range(1,len(planner.trajectory_setpoints)):
-            cf.commander.send_position_setpoint(planner.trajectory_setpoints[index][0],
-                                                planner.trajectory_setpoints[index][1],
-                                                planner.trajectory_setpoints[index][2],
-                                                0) # 关闭 Yaw 轴控制
+        #00FF00 读取飞行数据测试
+        for _ in range(100):
+            record_position(le, flight_log)
             time.sleep(0.1)
 
-        # 降落
-        TOOLS.FLY_or_LAND(cf, 'land', HOVER_HEIGHT, TIME_LAND)
+        # 保存飞行数据到 CSV
+        df = pd.DataFrame(flight_log, columns=['x', 'y', 'z', 'yaw'])
+        df.to_csv('flight_log.csv', index=False)
+        print("飞行数据已保存到 flight_log.csv")
+
+        # # 起飞
+        # TOOLS.FLY_or_LAND(cf, 'takeoff', HOVER_HEIGHT, TIME_TAKE_OFF)
+
+        # # 巡航
+        # for index in range(1,len(planner.trajectory_setpoints)):
+        #     cf.commander.send_position_setpoint(planner.trajectory_setpoints[index][0],
+        #                                         planner.trajectory_setpoints[index][1],
+        #                                         planner.trajectory_setpoints[index][2],
+        #                                         0) # 关闭 Yaw 轴控制
+        #     time.sleep(0.1)
+
+        # # 降落
+        # TOOLS.FLY_or_LAND(cf, 'land', HOVER_HEIGHT, TIME_LAND)
+        ##################################################### 控制部分 #####################################################
+
         TOOLS.auto_reconnect(cf, uri)
         
         break

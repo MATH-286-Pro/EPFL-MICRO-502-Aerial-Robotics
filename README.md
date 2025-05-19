@@ -40,6 +40,11 @@ https://github.com/user-attachments/assets/74ce3f74-0939-41c1-b5f0-324baa804558
   - 光流计
   - 红外动捕 Lighthouse
 
+```bash
+cfclient 
+# 启动客户端监测 定位是否漂移
+# 内部有 Lighthouse 校准
+```
 
 ### **1.Python 路径补全**
 ```json
