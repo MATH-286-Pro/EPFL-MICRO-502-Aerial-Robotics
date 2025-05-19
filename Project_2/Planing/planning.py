@@ -29,7 +29,7 @@ class MotionPlanner3D():
         if self.DEBUG == 1:
             self.plot_continuous(obstacles, self.waypoints, self.trajectory_setpoints)
         elif self.DEBUG == 2:
-            self.plot_discrete(obstacles, self.waypoints, self.get_compact_trajectory(distance=0.2))
+            self.plot_discrete(obstacles, self.waypoints, self.get_sparse_trajectory(distance=0.2))
 
         # ---------------------------------------------------------------------------------------------------- ##
     #00FF00 #00FF00
@@ -231,7 +231,7 @@ class MotionPlanner3D():
     
 
 
-    def get_compact_trajectory(self, distance=0.2):
+    def get_sparse_trajectory(self, distance=0.2):
         """
         根据指定间距 distance（单位：米），返回等间距采样的轨迹点。
         返回: numpy 数组，形状 (N, 4)，每行 [x, y, z, yaw]

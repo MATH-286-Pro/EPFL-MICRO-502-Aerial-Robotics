@@ -38,6 +38,7 @@ import threading
 
 import TOOLS
 import pandas as pd
+import numpy as np
 
 from pynput import keyboard # Import the keyboard module for key press detection
 
@@ -63,6 +64,28 @@ def record_position(le,flight_log)->None:
         pos.get('stateEstimate.yaw', 0),
     ])
 
+def get_real_position(le:Crazyflie)->np.ndarray:
+    pos = le.position
+    return np.array([
+        pos.get('stateEstimate.x', 0),
+        pos.get('stateEstimate.y', 0),
+        pos.get('stateEstimate.z', 0),
+        pos.get('stateEstimate.yaw', 0),
+    ])
+
+# 定义到达位置判断
+def check_at_command(pos_real, pos_command, threshold=0.02):
+    pos_real    = pos_real[0:3]
+    pos_command = pos_command[0:3]
+
+    diff = np.linalg.norm(pos_real - pos_command)
+
+    if diff < threshold:  
+        return True
+    else:
+        return False
+    
+
 
 # Define your custom callback function
 def emergency_stop_callback(cf):
@@ -79,6 +102,7 @@ def emergency_stop_callback(cf):
     # Start listening for key presses
     with keyboard.Listener(on_press=on_press) as listener:
         listener.join()
+
 
 if __name__ == '__main__':
     # Initialize the low-level drivers
@@ -116,7 +140,7 @@ if __name__ == '__main__':
         # 定义飞行参数
         TIME_TAKE_OFF = 2*second
         TIME_LAND     = 2*second
-        HOVER_HEIGHT  = 30*cm  
+        HOVER_HEIGHT  = 100q*cm  
         
         # 定义飞行轨迹
         Trajectory = TOOLS.Trajectory_Class('position_records.csv', HOVER_HEIGHT)
@@ -125,30 +149,53 @@ if __name__ == '__main__':
 
         ##################################################### 控制部分 #####################################################
 
-        #00FF00 读取飞行数据测试
-        for _ in range(100):
-            record_position(le, flight_log)
-            time.sleep(0.1)
+        # 起飞
+        TOOLS.FLY_or_LAND(cf, 'takeoff', HOVER_HEIGHT, TIME_TAKE_OFF)
 
-        # 保存飞行数据到 CSV
+        # 巡航
+        POS_COMMAND = planner.trajectory_setpoints
+
+        # for index in range(1,len(POS_COMMAND)):
+        #     cf.commander.send_position_setpoint(POS_COMMAND[index][0],
+        #                                         POS_COMMAND[index][1],
+        #                                         POS_COMMAND[index][2],
+        #                                         0) # 关闭 Yaw 轴控制
+        #     record_position(le, flight_log) #00FF00 记录飞行数据
+        #     time.sleep(0.1)
+        
+        start_time = time.time()
+        index = 0
+        while index < len(POS_COMMAND):
+
+
+            
+            current_time = time.time() - start_time
+            # index = np.searchsorted(planner.time_setpoints, current_time, side='right')
+            # index = max(0, index)  # 防止为负数
+            # index = min(index, len(POS_COMMAND)+2)
+
+            if time.time() - start_time >= planner.time_setpoints[index]:
+                index += 1
+
+            try:
+                # 发送位置指令
+                cf.commander.send_position_setpoint(POS_COMMAND[index][0],
+                                                    POS_COMMAND[index][1],
+                                                    POS_COMMAND[index][2],
+                                                    0)
+                record_position(le, flight_log)
+            except IndexError:
+                pass
+            time.sleep(0.02)
+
+        # 降落
+        TOOLS.FLY_or_LAND(cf, 'land', HOVER_HEIGHT, TIME_LAND)
+        ##################################################### 控制部分 #####################################################
+
+       # 保存飞行数据到 CSV
         df = pd.DataFrame(flight_log, columns=['x', 'y', 'z', 'yaw'])
         df.to_csv('flight_log.csv', index=False)
         print("飞行数据已保存到 flight_log.csv")
-
-        # # 起飞
-        # TOOLS.FLY_or_LAND(cf, 'takeoff', HOVER_HEIGHT, TIME_TAKE_OFF)
-
-        # # 巡航
-        # for index in range(1,len(planner.trajectory_setpoints)):
-        #     cf.commander.send_position_setpoint(planner.trajectory_setpoints[index][0],
-        #                                         planner.trajectory_setpoints[index][1],
-        #                                         planner.trajectory_setpoints[index][2],
-        #                                         0) # 关闭 Yaw 轴控制
-        #     time.sleep(0.1)
-
-        # # 降落
-        # TOOLS.FLY_or_LAND(cf, 'land', HOVER_HEIGHT, TIME_LAND)
-        ##################################################### 控制部分 #####################################################
 
         TOOLS.auto_reconnect(cf, uri)
         
