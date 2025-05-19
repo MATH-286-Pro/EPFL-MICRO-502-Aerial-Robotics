@@ -6,24 +6,30 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 class MotionPlanner3D():
     
     #Question: SIMON PID, what is vel_max set for PID? Check should be same here
-    def __init__(self, path, time = None, DEBUG = False):
+    def __init__(self, waypoints, time = None, DEBUG = 0):
 
-        self.path = path
+        self.waypoints = waypoints
 
         if time == None:
-            self.t_f = len(self.path) * 1.5  # 20 -> 30
+            self.t_f = len(self.waypoints) * 1.5  # 20 -> 30
         else:
             self.t_f = time
 
         self.DEBUG = DEBUG
 
-        self.trajectory_setpoints = None
-        self.time_setpoints       = None
+        self.trajectory_setpoints = None # 最终连续轨迹
+        self.time_setpoints       = None # 轨迹时间 
         obstacles = None
 
-        self.init_params(self.path)
+        # 启动函数
+        self.init_params(self.waypoints)
+        self.run_planner(obstacles, self.waypoints) # 计算所有数据
 
-        self.run_planner(obstacles, self.path) # 计算所有数据
+        # 轨迹可视化
+        if self.DEBUG == 1:
+            self.plot_continuous(obstacles, self.waypoints, self.trajectory_setpoints)
+        elif self.DEBUG == 2:
+            self.plot_discrete(obstacles, self.waypoints, self.get_compact_trajectory(distance=0.2))
 
         # ---------------------------------------------------------------------------------------------------- ##
     #00FF00 #00FF00
@@ -192,8 +198,11 @@ class MotionPlanner3D():
 
         trajectory_setpoints = np.hstack((x_vals, y_vals, z_vals, yaw_vals)) #0000FF
 
-        if self.DEBUG:
-            self.plot(obs, path_waypoints, trajectory_setpoints)
+        # # 轨迹可视化
+        # if self.DEBUG == 1:
+        #     self.plot(obs, path_waypoints, trajectory_setpoints)
+        # elif self.DEBUG == 2:
+        #     self.plot(obs, path_waypoints, self.get_compact_trajectory(distance=0.2))
             
         # Find the maximum absolute velocity during the segment
         vel_max = np.max(np.sqrt(v_x_vals**2 + v_y_vals**2 + v_z_vals**2))
@@ -220,6 +229,39 @@ class MotionPlanner3D():
         
         ax.add_collection3d(Poly3DCollection(faces, color=color, alpha=alpha))
     
+
+
+    def get_compact_trajectory(self, distance=0.2):
+        """
+        根据指定间距 distance（单位：米），返回等间距采样的轨迹点。
+        返回: numpy 数组，形状 (N, 4)，每行 [x, y, z, yaw]
+        """
+        if self.trajectory_setpoints is None:
+            return None
+
+        traj = self.trajectory_setpoints
+        xyz = traj[:, :3]
+        yaw = traj[:, 3]
+
+        # 计算每段的距离
+        dists = np.linalg.norm(np.diff(xyz, axis=0), axis=1)
+        cum_dist = np.insert(np.cumsum(dists), 0, 0)  # 距离累计
+
+        total_dist = cum_dist[-1]
+        num_points = int(np.floor(total_dist / distance)) + 1
+        sample_dists = np.linspace(0, total_dist, num_points)
+
+        # 对每个维度插值
+        compact_xyz = np.zeros((num_points, 3))
+        for i in range(3):
+            compact_xyz[:, i] = np.interp(sample_dists, cum_dist, xyz[:, i])
+        # 对 yaw 也插值
+        compact_yaw = np.interp(sample_dists, cum_dist, yaw)
+
+        compact_path = np.hstack((compact_xyz, compact_yaw.reshape(-1, 1)))
+        return compact_path
+
+
     # def plot(self, obs, path_waypoints, trajectory_setpoints):
 
     #     # Plot 3D trajectory
@@ -253,7 +295,11 @@ class MotionPlanner3D():
 
     #     plt.show()
 
-    def plot(self, obs, path_waypoints, trajectory_setpoints):
+    def plot_continuous(self, 
+             obs,                  # 障碍物
+             path_waypoints,       # 路径点 - 离散
+             trajectory_setpoints  # 轨迹点 - 接近连续
+             ):
         # 创建 figure 和 ax
         fig = plt.figure(figsize=(8, 6))
         ax = fig.add_subplot(111, projection='3d')
@@ -301,6 +347,78 @@ class MotionPlanner3D():
                 # normalize=True,
                 arrow_length_ratio=0.4,  # 头部占 40%
                 pivot='tail',            # 箭尾在 (x,y,z)
+                linewidth=1,
+                color='black'
+            )
+
+        # 设置坐标轴范围、标签、图例
+        ax.set_xlim(-2.0, +3.0)
+        ax.set_ylim(-1.5, +2.0)
+        ax.set_zlim(0, 4)
+        ax.set_xlabel("X Position")
+        ax.set_ylabel("Y Position")
+        ax.set_zlabel("Z Position")
+        ax.set_title("3D Motion planning trajectories")
+        ax.legend()
+
+        # 俯视视角
+        ax.view_init(elev=90, azim=90)
+
+        plt.show()
+
+
+    def plot_discrete(self, 
+                obs,                  # 障碍物
+                path_waypoints,       # 路径点 - 离散
+                trajectory_setpoints  # 轨迹点 - 采样点
+                ):
+        """
+        只画轨迹点（不画连续轨迹线），并可选画箭头表示朝向。
+        """
+        fig = plt.figure(figsize=(8, 6))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # 画障碍物
+        if obs is not None:
+            for ob in obs:
+                self.plot_obstacle(ax, ob[0], ob[1], ob[2], ob[3], ob[4], ob[5])
+
+        # 画轨迹点
+        ax.scatter(
+            trajectory_setpoints[:,0],
+            trajectory_setpoints[:,1],
+            trajectory_setpoints[:,2],
+            color='blue', marker='.', label="Trajectory Points"
+        )
+
+        # 画路径点
+        waypoints_x = [p[0] for p in path_waypoints]
+        waypoints_y = [p[1] for p in path_waypoints]
+        waypoints_z = [p[2] for p in path_waypoints]
+        ax.scatter(
+            waypoints_x, waypoints_y, waypoints_z,
+            color='red', marker='o', label="Waypoints"
+        )
+
+        # 可选：画箭头表示朝向
+        skip = 10        # 每隔多少个点画一个箭头
+        arrow_len = 0.2  # 箭头长度
+        xs = trajectory_setpoints[:,0]
+        ys = trajectory_setpoints[:,1]
+        zs = trajectory_setpoints[:,2]
+        yaws = np.deg2rad(trajectory_setpoints[:,3])
+
+        for i in range(0, len(xs), skip):
+            x, y, z, yaw = xs[i], ys[i], zs[i], yaws[i]
+            dx = np.cos(yaw)
+            dy = np.sin(yaw)
+            dz = 0
+            ax.quiver(
+                x, y, z,
+                dx, dy, dz,
+                length=arrow_len,
+                arrow_length_ratio=0.4,
+                pivot='tail',
                 linewidth=1,
                 color='black'
             )

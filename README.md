@@ -14,13 +14,24 @@ https://github.com/user-attachments/assets/74ce3f74-0939-41c1-b5f0-324baa804558
 - 在 `main.py` 开头修改使用键盘还是自动路径
 - 在 `my_assignment.py` 中编写控制代码
 
-
+### **1.Webots Python Debug 路径补全**
+```json
+{
+    "python.autoComplete.extraPaths": [ 
+        "C:\\Program Files\\Webots\\lib\\controller\\python",
+    ],
+    "python.analysis.extraPaths": [
+        "C:\\Program Files\\Webots\\lib\\controller\\python",
+    ],
+}
+```
 
 
 ## **硬件项目 Hardware Project**
 
 ### 硬件任务
 - [x] 移植 Project 1 路径规划 Class
+- [ ] 优化路径间距
 
 ### **0.硬件说明**
 - 无人机：

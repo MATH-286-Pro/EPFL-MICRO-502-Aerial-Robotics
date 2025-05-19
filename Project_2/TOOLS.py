@@ -144,6 +144,10 @@ class Trajectory_Class:
         y = self.full_data['avg_y'].values
         z = self.full_data['avg_z'].values
 
+        ######### 加入绕两圈需要的数据点 #########
+        for index in range(len(x)):
+            point = [x[index], y[index], z[index]]
+            self.point_list.append(point)
 
         for index in range(len(x)):
             point = [x[index], y[index], z[index]]

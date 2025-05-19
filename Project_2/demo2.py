@@ -105,7 +105,7 @@ if __name__ == '__main__':
         # 定义飞行轨迹
         Trajectory = TOOLS.Trajectory_Class('position_records.csv', HOVER_HEIGHT)
         TARGET_POINTS = Trajectory.point_list
-        planner = MotionPlanner3D(path = TARGET_POINTS)
+        planner = MotionPlanner3D(waypoints = TARGET_POINTS)
 
         ##################################################### 控制部分 #####################################################
 
