@@ -1,20 +1,16 @@
 # 自定义工具
 
-import logging
 import time
-from threading import Timer
+import logging
 import threading
-
+import numpy as np
+import pandas as pd
+from threading import Timer
 from pynput import keyboard # Import the keyboard module for key press detection
-
 import cflib.crtp  # noqa
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.utils import uri_helper, power_switch
-
-import numpy as np
-import pandas as pd
-
 
 
 
@@ -123,58 +119,37 @@ class LoggingExample:
 class Trajectory_Class:
 
     def __init__(self, 
-                 path: str,
-                 Hover_Height: float = 0.30):
+                 path: str):
         
         self.file_path = path
         self.full_data = None
-        self.Hover_Height = Hover_Height
         self.point_list = []
+        self.point_array = None
 
         # 启动函数
-        self.read_data()
+        self.read_data(self.file_path)
         self.process_data()
-        self.check_and_fix_trajectory()
     
-    def read_data(self):
-        self.full_data = pd.read_csv(self.file_path)
+    def read_data(self, path):
+        self.full_data = pd.read_csv(path)
     
     def process_data(self):
         x = self.full_data['avg_x'].values
         y = self.full_data['avg_y'].values
         z = self.full_data['avg_z'].values
 
-        ######### 加入绕两圈需要的数据点 #########
         for index in range(len(x)):
             point = [x[index], y[index], z[index]]
             self.point_list.append(point)
 
-        for index in range(len(x)):
-            point = [x[index], y[index], z[index]]
-            self.point_list.append(point)
-    
-    def check_and_fix_trajectory(self):
-        point_start = np.array(self.point_list[0])
-        point_end   = np.array(self.point_list[-1])
+    ############ 对外接口 ############
+    def return_gate_points_list(self):
+        return self.point_list
 
-        # 如果记录了起点 修正悬停点
-        if np.linalg.norm(point_start - np.array([0,0,0])) < 0.5:
-            self.point_list[0] = np.array([0.0, 0.0, self.Hover_Height])
-
-        # 如果没记录起点 加入悬停点
-        else:
-            self.point_list.insert(0, [0.0, 0.0, self.Hover_Height])
-        
-        # 如果记录了终点 修正悬停点
-        if np.linalg.norm(point_start - np.array([0,0,0])) < 0.5:
-            self.point_list[-1] = np.array([0.0, 0.0, self.Hover_Height])
-        
-        # 如果没记录终点 加入悬停点
-        else:
-            self.point_list.append([0.0, 0.0, self.Hover_Height])
-
-
-
+    def return_gate_points_array(self):
+        # 将点列表转换为numpy数组
+        self.point_array = np.array(self.point_list)
+        return self.point_array
 
 
 
@@ -182,7 +157,10 @@ class Trajectory_Class:
 def FLY_or_LAND(cf: Crazyflie, 
                 type:str, 
                 HEIGHT, 
-                TIME):
+                TIME_):
+    
+    # 单位变化
+    TIME = 10*TIME_
 
     if type == 'takeoff':
         for y in range(TIME):

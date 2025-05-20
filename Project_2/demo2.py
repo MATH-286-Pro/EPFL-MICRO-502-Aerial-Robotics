@@ -46,7 +46,7 @@ import cflib.crtp  # noqa
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.utils import uri_helper, power_switch
-from Planing.planning import MotionPlanner3D
+from Planning.planning import MotionPlanner3D
 #0000FF TODO: CHANGE THIS URI TO YOUR CRAZYFLIE & YOUR RADIO CHANNEL
 uri = uri_helper.uri_from_env(default='radio://0/30/2M/E7E7E7E713')
 
@@ -124,28 +124,28 @@ if __name__ == '__main__':
     flight_log = [] # 用于记录无人机位置
 
 
-    #0000FF TODO : CHANGE THIS TO YOUR NEEDS
     print("Starting control")
     while le.is_connected:
         time.sleep(0.01)
         
         # 定义单位
-        second  = 10    #FF0000 注意这个单位定义是不一样的
-        mm = 0.001 # 毫米
-        cm = 0.01  # 厘米
-        m  = 1     # 米
+        second  = 1  # 秒
+        mm = 0.001   # 毫米
+        cm = 0.01    # 厘米
+        m  = 1       # 米
 
         ##################################################### 飞行数据 #####################################################
 
         # 定义飞行参数
-        TIME_TAKE_OFF = 2*second
-        TIME_LAND     = 2*second
-        HOVER_HEIGHT  = 100q*cm  
+        TIME_TAKE_OFF = 1*second
+        TIME_LAND     = 1*second
+        HOVER_HEIGHT  = 30*cm  
         
         # 定义飞行轨迹
         Trajectory = TOOLS.Trajectory_Class('position_records.csv', HOVER_HEIGHT)
-        TARGET_POINTS = Trajectory.point_list
-        planner = MotionPlanner3D(waypoints = TARGET_POINTS)
+        TARGET_POINTS = Trajectory.return_gate_points_list()
+        planner = MotionPlanner3D(Gate_points = TARGET_POINTS)
+        planner.resample_and_replan(distance=1.0)     # 重采样轨迹 #FF0000
 
         ##################################################### 控制部分 #####################################################
 
@@ -155,6 +155,7 @@ if __name__ == '__main__':
         # 巡航
         POS_COMMAND = planner.trajectory_setpoints
 
+        # 开环飞行
         # for index in range(1,len(POS_COMMAND)):
         #     cf.commander.send_position_setpoint(POS_COMMAND[index][0],
         #                                         POS_COMMAND[index][1],
@@ -163,12 +164,11 @@ if __name__ == '__main__':
         #     record_position(le, flight_log) #00FF00 记录飞行数据
         #     time.sleep(0.1)
         
+        # 基于时间的飞行
         start_time = time.time()
         index = 0
         while index < len(POS_COMMAND):
 
-
-            
             current_time = time.time() - start_time
             # index = np.searchsorted(planner.time_setpoints, current_time, side='right')
             # index = max(0, index)  # 防止为负数
@@ -178,12 +178,11 @@ if __name__ == '__main__':
                 index += 1
 
             try:
-                # 发送位置指令
                 cf.commander.send_position_setpoint(POS_COMMAND[index][0],
                                                     POS_COMMAND[index][1],
                                                     POS_COMMAND[index][2],
                                                     0)
-                record_position(le, flight_log)
+                record_position(le, flight_log) #00FF00 记录飞行数据
             except IndexError:
                 pass
             time.sleep(0.02)
