@@ -384,6 +384,14 @@ class MotionPlanner3D():
         ax.set_title("3D Motion planning trajectories")
         ax.legend()
 
+        # 手动设置坐标轴范围相等
+        xyz_limits = np.array([ax.get_xlim3d(), ax.get_ylim3d(), ax.get_zlim3d()])
+        xyz_center = np.mean(xyz_limits, axis=1)
+        xyz_radius = (xyz_limits[:,1] - xyz_limits[:,0]).max() / 2
+        ax.set_xlim3d([xyz_center[0] - xyz_radius, xyz_center[0] + xyz_radius])
+        ax.set_ylim3d([xyz_center[1] - xyz_radius, xyz_center[1] + xyz_radius])
+        ax.set_zlim3d([xyz_center[2] - xyz_radius, xyz_center[2] + xyz_radius])
+
         # 俯视视角
         ax.view_init(elev=90, azim=90)
 
@@ -455,6 +463,14 @@ class MotionPlanner3D():
         ax.set_zlabel("Z Position")
         ax.set_title("3D Motion planning trajectories")
         ax.legend()
+    
+        # 手动设置坐标轴范围相等
+        xyz_limits = np.array([ax.get_xlim3d(), ax.get_ylim3d(), ax.get_zlim3d()])
+        xyz_center = np.mean(xyz_limits, axis=1)
+        xyz_radius = (xyz_limits[:,1] - xyz_limits[:,0]).max() / 2
+        ax.set_xlim3d([xyz_center[0] - xyz_radius, xyz_center[0] + xyz_radius])
+        ax.set_ylim3d([xyz_center[1] - xyz_radius, xyz_center[1] + xyz_radius])
+        ax.set_zlim3d([xyz_center[2] - xyz_radius, xyz_center[2] + xyz_radius])
 
         # 俯视视角
         ax.view_init(elev=90, azim=90)

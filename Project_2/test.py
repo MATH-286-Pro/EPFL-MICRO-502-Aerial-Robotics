@@ -23,16 +23,17 @@ from Planning.planning import MotionPlanner3D
 
 cm = 0.01
 Trajectory = tools.Trajectory_Class('position_records.csv') # 仅返回门的位置
-test_planner = MotionPlanner3D(Gate_points = Trajectory.return_gate_points_list(),DEBUG = 0)
+test_planner = MotionPlanner3D(Gate_points = Trajectory.return_gate_points_list(), time_gain= 1.5, DEBUG = 0)
 
 #FF0000 测试重采样避免高速轨迹
-test_planner.resample_and_replan(distance=1.0)
+test_planner.resample_and_replan(distance=1.3) # 0.5 1.3 
 
 # data_OpenLoop = PLOT.get_real_pos_list("flight_log_10_OL.csv")
-data_CloseLoop = PLOT.get_real_pos_list("flight_log_14_TimeBased.csv")
+# data_real = PLOT.get_real_pos_list("flight_log_2025_5_22_TB1.csv")
+data_real = PLOT.get_real_pos_list("flight_log.csv")
 PLOT.plot_multiple_flight_logs([
                                 # data_OpenLoop, 
-                                data_CloseLoop, 
+                                data_real, 
                                 test_planner.trajectory_setpoints,
                                 np.array(test_planner.waypoints),
                                 ],

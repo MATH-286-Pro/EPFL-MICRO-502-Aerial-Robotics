@@ -101,4 +101,11 @@ def send_full_state_setpoint(self, pos, vel, acc, orientation, rollrate, pitchra
 - **2025.5.16 周五**
   - 无人机成功跟随路径飞行
   - 发现轨迹部分点过于密集，存在提速优化空间
-
+- **2025.5.19 周一**
+  - 使用基于时间的轨迹
+  - 发现稀疏点速度过快，导致跟踪效果下降
+- **2025.5.22 周四**
+  - 基于时间 GAIN = 1.5 Distance= 0.5 18.92s
+  - 基于时间 GAIN = 1.3 Distance= 0.5 17.41s
+  - 基于时间 GAIN = 1.0 Distance= 0.5 寄了   疑似转弯处速度过快
+  - 基于时间 GAIN = 1.5 Distance= 1.3 寄了
