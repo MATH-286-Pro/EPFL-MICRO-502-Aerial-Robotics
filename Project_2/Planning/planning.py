@@ -6,20 +6,38 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 class MotionPlanner3D():
     
     #Question: SIMON PID, what is vel_max set for PID? Check should be same here
-    def __init__(self, waypoints, time = None, DEBUG = 0):
+    def __init__(self, Gate_points, time_gain = 1.5, DEBUG = 0):
 
-        self.waypoints = waypoints
-
-        if time == None:
-            self.t_f = len(self.waypoints) * 1.5  # 20 -> 30
-        else:
-            self.t_f = time
-
+        
         self.DEBUG = DEBUG
+        self.Gate_points = Gate_points
+
+        #FF0000 起点
+        start_point = [0,0,0.3] # 30cm 起飞高度
+        self.start_point = start_point
+
+        # 构建两圈 way_points
+        way_points = [start_point]
+        for point in Gate_points:
+            way_points.append(point)
+        for point in Gate_points:
+            way_points.append(point)
+        way_points.append(start_point) # 终点
+        
+        self.waypoints = way_points
+        self.original_waypoints = way_points.copy() # 记录原始轨迹点
+
+        # 飞行时间
+        self.t_f = len(self.waypoints) * time_gain  # 20 -> 30
+
 
         self.trajectory_setpoints = None # 最终连续轨迹
         self.time_setpoints       = None # 轨迹时间 
-        obstacles = None
+        obstacles                 = None
+
+        # 变量
+        self.result_traj_vel_max = None
+        self.result_traj_acc_max = None
 
         # 启动函数
         self.init_params(self.waypoints)
@@ -29,9 +47,13 @@ class MotionPlanner3D():
         if self.DEBUG == 1:
             self.plot_continuous(obstacles, self.waypoints, self.trajectory_setpoints)
         elif self.DEBUG == 2:
-            self.plot_discrete(obstacles, self.waypoints, self.get_compact_trajectory(distance=0.2))
+            self.plot_discrete(obstacles, self.waypoints, self.get_sparse_trajectory(distance=0.2))
 
         # ---------------------------------------------------------------------------------------------------- ##
+    
+    
+    
+    
     #00FF00 #00FF00
     # 根据起点，终点，以及经过点规划轨迹
     def run_planner(self, obs, path_waypoints):    
@@ -214,6 +236,9 @@ class MotionPlanner3D():
         assert vel_max <= self.vel_lim, "The drone velocity exceeds the limit velocity : " + str(vel_max) + " m/s"
         assert acc_max <= self.acc_lim, "The drone acceleration exceeds the limit acceleration : " + str(acc_max) + " m/s²"
 
+        self.result_traj_vel_max = vel_max
+        self.result_traj_acc_max = acc_max
+
         # ---------------------------------------------------------------------------------------------------- ##
 
         return trajectory_setpoints, time_setpoints
@@ -230,70 +255,68 @@ class MotionPlanner3D():
         ax.add_collection3d(Poly3DCollection(faces, color=color, alpha=alpha))
     
 
-
-    def get_compact_trajectory(self, distance=0.2):
+    def resample_and_replan(self, distance=1.0):
         """
-        根据指定间距 distance（单位：米），返回等间距采样的轨迹点。
-        返回: numpy 数组，形状 (N, 4)，每行 [x, y, z, yaw]
+        根据当前 trajectory_setpoints 采样等间距 waypoints，然后重新规划轨迹。
         """
         if self.trajectory_setpoints is None:
-            return None
-
+            raise ValueError("trajectory_setpoints is None, 请先运行一次规划。")
+        
+        # 采样等间距的 waypoints
         traj = self.trajectory_setpoints
         xyz = traj[:, :3]
-        yaw = traj[:, 3]
-
-        # 计算每段的距离
         dists = np.linalg.norm(np.diff(xyz, axis=0), axis=1)
-        cum_dist = np.insert(np.cumsum(dists), 0, 0)  # 距离累计
-
+        cum_dist = np.insert(np.cumsum(dists), 0, 0)
         total_dist = cum_dist[-1]
         num_points = int(np.floor(total_dist / distance)) + 1
         sample_dists = np.linspace(0, total_dist, num_points)
-
-        # 对每个维度插值
-        compact_xyz = np.zeros((num_points, 3))
+        sampled_xyz = np.zeros((num_points, 3))
         for i in range(3):
-            compact_xyz[:, i] = np.interp(sample_dists, cum_dist, xyz[:, i])
-        # 对 yaw 也插值
-        compact_yaw = np.interp(sample_dists, cum_dist, yaw)
+            sampled_xyz[:, i] = np.interp(sample_dists, cum_dist, xyz[:, i])
+        # 重新规划
+        self.waypoints = sampled_xyz.tolist()
+        self.init_params(self.waypoints)
+        self.run_planner(None, self.waypoints)
 
-        compact_path = np.hstack((compact_xyz, compact_yaw.reshape(-1, 1)))
-        return compact_path
+    # def resample_and_replan(self, distance=1.0):
+    #     """
+    #     根据当前 trajectory_setpoints 采样等间距 waypoints，保留原始 waypoints，并保证采样点间距均匀。
+    #     """
+    #     if self.trajectory_setpoints is None:
+    #         raise ValueError("trajectory_setpoints is None, 请先运行一次规划。")
+        
+    #     traj = self.trajectory_setpoints
+    #     xyz = traj[:, :3]
+    #     dists = np.linalg.norm(np.diff(xyz, axis=0), axis=1)
+    #     cum_dist = np.insert(np.cumsum(dists), 0, 0)
+    #     total_dist = cum_dist[-1]
+    #     num_points = int(np.floor(total_dist / distance)) + 1
+    #     sample_dists = np.linspace(0, total_dist, num_points)
+    #     sampled_xyz = np.zeros((num_points, 3))
+    #     for i in range(3):
+    #         sampled_xyz[:, i] = np.interp(sample_dists, cum_dist, xyz[:, i])
 
-
-    # def plot(self, obs, path_waypoints, trajectory_setpoints):
-
-    #     # Plot 3D trajectory
-    #     fig = plt.figure(figsize=(8, 6))
-    #     ax = fig.add_subplot(111, projection='3d')
-
-    #     if obs is not None:
-    #         for ob in obs:
-    #             self.plot_obstacle(ax, ob[0], ob[1], ob[2], ob[3], ob[4], ob[5])
-
-    #     ax.plot(trajectory_setpoints[:,0], trajectory_setpoints[:,1], trajectory_setpoints[:,2], label="Minimum-Jerk Trajectory", linewidth=2)
-    #     ax.set_xlim(-2.0, +3.0)
-    #     ax.set_ylim(-1.5, +2.0)
-    #     ax.set_zlim(0, 4)
-
-    #     # Plot waypoints
-    #     waypoints_x = [p[0] for p in path_waypoints]
-    #     waypoints_y = [p[1] for p in path_waypoints]
-    #     waypoints_z = [p[2] for p in path_waypoints]
-    #     ax.scatter(waypoints_x, waypoints_y, waypoints_z, color='red', marker='o', label="Waypoints")
-
-    #     # Labels and legend
-    #     ax.set_xlabel("X Position")
-    #     ax.set_ylabel("Y Position")
-    #     ax.set_zlabel("Z Position")
-    #     ax.set_title("3D Motion planning trajectories")
-    #     ax.legend()
-
-    #     # 俯视图：elev=90（俯视），azim= -90(调整朝向，可根据需要改成0、180等)
-    #     ax.view_init(elev=90, azim=90)
-
-    #     plt.show()
+    #     # 保留原始 waypoints，合并后去重并排序
+    #     orig_xyz = np.array(self.original_waypoints)
+    #     # 计算原始点在轨迹上的最近距离
+    #     orig_dists = []
+    #     for pt in orig_xyz:
+    #         dist_along = np.argmin(np.linalg.norm(xyz - pt, axis=1))
+    #         orig_dists.append(cum_dist[dist_along])
+    #     # 合并采样点和原始点
+    #     all_points = np.vstack((sampled_xyz, orig_xyz))
+    #     all_dists = np.hstack((sample_dists, orig_dists))
+    #     # 按距离排序，去重
+    #     sort_idx = np.argsort(all_dists)
+    #     sorted_points = all_points[sort_idx]
+    #     # 去重（保留顺序）
+    #     unique_points = []
+    #     for pt in sorted_points:
+    #         if len(unique_points) == 0 or not np.allclose(pt, unique_points[-1]):
+    #             unique_points.append(pt)
+    #     self.waypoints = [p.tolist() for p in unique_points]
+    #     self.init_params(self.waypoints)
+    #     self.run_planner(None, self.waypoints)
 
     def plot_continuous(self, 
              obs,                  # 障碍物
