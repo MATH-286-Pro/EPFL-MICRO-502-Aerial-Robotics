@@ -109,3 +109,9 @@ def send_full_state_setpoint(self, pos, vel, acc, orientation, rollrate, pitchra
   - 基于时间 GAIN = 1.3 Distance= 0.5 17.41s
   - 基于时间 GAIN = 1.0 Distance= 0.5 寄了   疑似转弯处速度过快
   - 基于时间 GAIN = 1.5 Distance= 1.3 寄了
+  - 修改均匀采样为限制最大速度采样
+  - 基于时间 GAIN = 1.5 Vel_lim = 1.2 22.08s
+  - 基于时间 GAIN = 1.5 Vel_lim= 1.4 20s
+  - 基于时间 GAIN = 1.5 Vel_lim= 1.6 20s
+  - 基于时间 GAIN = 1.2 Vel_lim= 1.4 19.2s (降落时往前，+3s,实际16s)
+  - 基于时间 GAIN = 1.2 Vel_lim= 1.4 17.8s (降落时往前，+3s,实际16s)  time_landing = 0.5s

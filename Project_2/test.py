@@ -26,7 +26,7 @@ Trajectory = tools.Trajectory_Class('position_records.csv') # 仅返回门的位
 test_planner = MotionPlanner3D(Gate_points = Trajectory.return_gate_points_list(), time_gain= 1.5, DEBUG = 0)
 
 #FF0000 测试重采样避免高速轨迹
-test_planner.resample_and_replan(distance=1.3) # 0.5 1.3 
+# test_planner.resample_and_replan(distance=0.8) # 0.5 1.3 
 
 # data_OpenLoop = PLOT.get_real_pos_list("flight_log_10_OL.csv")
 # data_real = PLOT.get_real_pos_list("flight_log_2025_5_22_TB1.csv")

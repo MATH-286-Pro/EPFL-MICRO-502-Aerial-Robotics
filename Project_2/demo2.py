@@ -144,15 +144,15 @@ if __name__ == '__main__':
         ##################################################### 飞行数据 #####################################################
 
         # 定义飞行参数
-        TIME_TAKE_OFF = 1*second
-        TIME_LAND     = 1*second
+        TIME_TAKE_OFF = 0.5*second
+        TIME_LAND     = 0.5*second
         HOVER_HEIGHT  = 30*cm  
         
         # 定义飞行轨迹
         Trajectory = tools.Trajectory_Class('position_records.csv')
         TARGET_POINTS = Trajectory.return_gate_points_list()
-        planner = MotionPlanner3D(Gate_points = TARGET_POINTS, time_gain=1.5)
-        planner.resample_and_replan(distance=0.8)     # 重采样轨迹 #FF0000
+        planner = MotionPlanner3D(Gate_points = TARGET_POINTS, time_gain=1.2)
+        # planner.resample_and_replan(distance=0.8)     # 重采样轨迹 #FF0000
 
         ##################################################### 控制部分 #####################################################
 
