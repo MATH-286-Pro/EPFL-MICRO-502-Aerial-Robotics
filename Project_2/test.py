@@ -1,7 +1,7 @@
-# import TOOLS
+# import tools
 # from Planing.planning import MotionPlanner3D
 
-# Trajectory = TOOLS.Trajectory_Class('position_records.csv')
+# Trajectory = tools.Trajectory_Class('position_records.csv')
 
 # planner = MotionPlanner3D(waypoints  = Trajectory.point_list,
 #                           DEBUG = True)
@@ -16,13 +16,13 @@ import pandas as pd
 parent_dir = os.path.abspath(os.path.join(os.getcwd(), ".."))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
-import TOOLS
+import tools
 import PLOT
 from Planning.planning import MotionPlanner3D
 
 
 cm = 0.01
-Trajectory = TOOLS.Trajectory_Class('position_records.csv') # 仅返回门的位置
+Trajectory = tools.Trajectory_Class('position_records.csv') # 仅返回门的位置
 test_planner = MotionPlanner3D(Gate_points = Trajectory.return_gate_points_list(),DEBUG = 0)
 
 #FF0000 测试重采样避免高速轨迹

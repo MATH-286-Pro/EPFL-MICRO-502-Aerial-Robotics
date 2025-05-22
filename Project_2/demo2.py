@@ -36,7 +36,7 @@ import time
 from threading import Timer
 import threading
 
-import TOOLS
+import Project_2.tools as tools
 import pandas as pd
 import numpy as np
 
@@ -64,26 +64,26 @@ def record_position(le,flight_log)->None:
         pos.get('stateEstimate.yaw', 0),
     ])
 
-def get_real_position(le:Crazyflie)->np.ndarray:
-    pos = le.position
-    return np.array([
-        pos.get('stateEstimate.x', 0),
-        pos.get('stateEstimate.y', 0),
-        pos.get('stateEstimate.z', 0),
-        pos.get('stateEstimate.yaw', 0),
-    ])
+# def get_real_position(le:Crazyflie)->np.ndarray:
+#     pos = le.position
+#     return np.array([
+#         pos.get('stateEstimate.x', 0),
+#         pos.get('stateEstimate.y', 0),
+#         pos.get('stateEstimate.z', 0),
+#         pos.get('stateEstimate.yaw', 0),
+#     ])
 
-# 定义到达位置判断
-def check_at_command(pos_real, pos_command, threshold=0.02):
-    pos_real    = pos_real[0:3]
-    pos_command = pos_command[0:3]
+# # 定义到达位置判断
+# def check_at_command(pos_real, pos_command, threshold=0.02):
+#     pos_real    = pos_real[0:3]
+#     pos_command = pos_command[0:3]
 
-    diff = np.linalg.norm(pos_real - pos_command)
+#     diff = np.linalg.norm(pos_real - pos_command)
 
-    if diff < threshold:  
-        return True
-    else:
-        return False
+#     if diff < threshold:  
+#         return True
+#     else:
+#         return False
     
 
 
@@ -94,7 +94,12 @@ def emergency_stop_callback(cf):
             if key.char == 'q':  # Check if the "space" key is pressed
                 print("Emergency stop triggered!")
                 cf.commander.send_stop_setpoint()  # Stop the Crazyflie
-                cf.close_link()  # Close the link to the Crazyflie
+
+                df = pd.DataFrame(flight_log, columns=['x', 'y', 'z', 'yaw'])
+                df.to_csv('flight_log.csv', index=False)
+                print("飞行数据已保存到 flight_log.csv")
+                tools.auto_reconnect(cf, uri)
+
                 return False     # Stop the listener
         except AttributeError:
             pass
@@ -105,10 +110,12 @@ def emergency_stop_callback(cf):
 
 
 if __name__ == '__main__':
+
+    ############## 无人机初始化 ##############
     # Initialize the low-level drivers
     cflib.crtp.init_drivers()
 
-    le = TOOLS.LoggingExample(uri)
+    le = tools.LoggingExample(uri)
     cf = le._cf
 
     cf.param.set_value('kalman.resetEstimation', '1')
@@ -142,7 +149,7 @@ if __name__ == '__main__':
         HOVER_HEIGHT  = 30*cm  
         
         # 定义飞行轨迹
-        Trajectory = TOOLS.Trajectory_Class('position_records.csv', HOVER_HEIGHT)
+        Trajectory = tools.Trajectory_Class('position_records.csv', HOVER_HEIGHT)
         TARGET_POINTS = Trajectory.return_gate_points_list()
         planner = MotionPlanner3D(Gate_points = TARGET_POINTS)
         planner.resample_and_replan(distance=1.0)     # 重采样轨迹 #FF0000
@@ -150,7 +157,7 @@ if __name__ == '__main__':
         ##################################################### 控制部分 #####################################################
 
         # 起飞
-        TOOLS.FLY_or_LAND(cf, 'takeoff', HOVER_HEIGHT, TIME_TAKE_OFF)
+        tools.FLY_or_LAND(cf, 'takeoff', HOVER_HEIGHT, TIME_TAKE_OFF)
 
         # 巡航
         POS_COMMAND = planner.trajectory_setpoints
@@ -170,9 +177,6 @@ if __name__ == '__main__':
         while index < len(POS_COMMAND):
 
             current_time = time.time() - start_time
-            # index = np.searchsorted(planner.time_setpoints, current_time, side='right')
-            # index = max(0, index)  # 防止为负数
-            # index = min(index, len(POS_COMMAND)+2)
 
             if time.time() - start_time >= planner.time_setpoints[index]:
                 index += 1
@@ -188,7 +192,7 @@ if __name__ == '__main__':
             time.sleep(0.02)
 
         # 降落
-        TOOLS.FLY_or_LAND(cf, 'land', HOVER_HEIGHT, TIME_LAND)
+        tools.FLY_or_LAND(cf, 'land', HOVER_HEIGHT, TIME_LAND)
         ##################################################### 控制部分 #####################################################
 
        # 保存飞行数据到 CSV
@@ -196,6 +200,6 @@ if __name__ == '__main__':
         df.to_csv('flight_log.csv', index=False)
         print("飞行数据已保存到 flight_log.csv")
 
-        TOOLS.auto_reconnect(cf, uri)
+        tools.auto_reconnect(cf, uri)
         
         break
