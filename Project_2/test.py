@@ -23,7 +23,10 @@ from Planning.planning import MotionPlanner3D
 
 cm = 0.01
 Trajectory = tools.Trajectory_Class('position_records.csv') # 仅返回门的位置
-test_planner = MotionPlanner3D(Gate_points = Trajectory.return_gate_points_list(), time_gain= 1.5, DEBUG = 0)
+test_planner = MotionPlanner3D(Gate_points = Trajectory.return_gate_points_list(), 
+                               time_gain   = 1.5, 
+                               speed_limit = 3.0,
+                               DEBUG = 0)
 
 #FF0000 测试重采样避免高速轨迹
 # test_planner.resample_and_replan(distance=0.8) # 0.5 1.3 
