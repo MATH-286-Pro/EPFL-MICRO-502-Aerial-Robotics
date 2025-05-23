@@ -1,11 +1,13 @@
 {
     "python.autoComplete.extraPaths": [ 
         "${workspaceFolder}\\crazyflie-lib-python",
+        "${workspaceFolder}\\Project_2",
         "C:\\Program Files\\Webots\\lib\\controller\\python",
         "./"
     ],
     "python.analysis.extraPaths": [
         "${workspaceFolder}\\crazyflie-lib-python",
+        "${workspaceFolder}\\Project_2",
         "C:\\Program Files\\Webots\\lib\\controller\\python",
         "./"
     ],

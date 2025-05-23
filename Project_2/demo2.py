@@ -63,27 +63,6 @@ def record_position(le,flight_log)->None:
         pos.get('stateEstimate.z', 0),
         pos.get('stateEstimate.yaw', 0),
     ])
-
-# def get_real_position(le:Crazyflie)->np.ndarray:
-#     pos = le.position
-#     return np.array([
-#         pos.get('stateEstimate.x', 0),
-#         pos.get('stateEstimate.y', 0),
-#         pos.get('stateEstimate.z', 0),
-#         pos.get('stateEstimate.yaw', 0),
-#     ])
-
-# # 定义到达位置判断
-# def check_at_command(pos_real, pos_command, threshold=0.02):
-#     pos_real    = pos_real[0:3]
-#     pos_command = pos_command[0:3]
-
-#     diff = np.linalg.norm(pos_real - pos_command)
-
-#     if diff < threshold:  
-#         return True
-#     else:
-#         return False
     
 
 
@@ -147,12 +126,19 @@ if __name__ == '__main__':
         TIME_TAKE_OFF = 0.5*second
         TIME_LAND     = 0.5*second
         HOVER_HEIGHT  = 30*cm  
+        TIME_GAIN     = 1.3
+        VEL_LIMIT     = 1.2
+        START_POINT   = [0, 0, HOVER_HEIGHT] 
         
         # 定义飞行轨迹
         Trajectory = tools.Trajectory_Class('position_records.csv')
         TARGET_POINTS = Trajectory.return_gate_points_list()
-        planner = MotionPlanner3D(Gate_points = TARGET_POINTS, time_gain=1.2)
-        # planner.resample_and_replan(distance=0.8)     # 重采样轨迹 #FF0000
+        planner = MotionPlanner3D(Gate_points = TARGET_POINTS,
+                                  start_point = START_POINT, 
+                                  time_gain   = TIME_GAIN, 
+                                  speed_limit = VEL_LIMIT)
+        
+        print("Estimated Time: ", planner.time_setpoints[-1] + TIME_TAKE_OFF + TIME_LAND)
 
         ##################################################### 控制部分 #####################################################
 
@@ -161,15 +147,7 @@ if __name__ == '__main__':
 
         # 巡航
         POS_COMMAND = planner.trajectory_setpoints
-
-        # 开环飞行
-        # for index in range(1,len(POS_COMMAND)):
-        #     cf.commander.send_position_setpoint(POS_COMMAND[index][0],
-        #                                         POS_COMMAND[index][1],
-        #                                         POS_COMMAND[index][2],
-        #                                         0) # 关闭 Yaw 轴控制
-        #     record_position(le, flight_log) #00FF00 记录飞行数据
-        #     time.sleep(0.1)
+        VEL_COMMAND = planner.trajectory_velocities
         
         # 基于时间的飞行
         start_time = time.time()
@@ -182,10 +160,22 @@ if __name__ == '__main__':
                 index += 1
 
             try:
-                cf.commander.send_position_setpoint(POS_COMMAND[index][0],
-                                                    POS_COMMAND[index][1],
-                                                    POS_COMMAND[index][2],
-                                                    0)
+                
+                cf.commander.send_position_setpoint(
+                    POS_COMMAND[index][0],
+                    POS_COMMAND[index][1],
+                    POS_COMMAND[index][2],
+                    0
+                )
+
+                # cf.commander.send_full_state_setpoint(
+                #     POS_COMMAND[index],
+                #     VEL_COMMAND[index],
+                #     [0,0,0],
+                #     [0,0,0,1],
+                #     0, 0, 0
+                # )
+
                 record_position(le, flight_log) #00FF00 记录飞行数据
             except IndexError:
                 pass

@@ -115,3 +115,6 @@ def send_full_state_setpoint(self, pos, vel, acc, orientation, rollrate, pitchra
   - 基于时间 GAIN = 1.5 Vel_lim= 1.6 20s
   - 基于时间 GAIN = 1.2 Vel_lim= 1.4 19.2s (降落时往前，+3s,实际16s)
   - 基于时间 GAIN = 1.2 Vel_lim= 1.4 17.8s (降落时往前，+3s,实际16s)  time_landing = 0.5s
+
+- **2025.5.23 周五**
+  - Full state control, TIMG_GAIN = 1.4, VEL_LIMIT = 1.4
