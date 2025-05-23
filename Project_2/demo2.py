@@ -126,14 +126,15 @@ if __name__ == '__main__':
         TIME_TAKE_OFF = 0.5*second
         TIME_LAND     = 0.5*second
         HOVER_HEIGHT  = 30*cm  
-        TIME_GAIN     = 1.4
-        SPEED_GAIN    = 0.4
-        VEL_LIMIT     = 4 # 1.4
+        TIME_GAIN     = 1.3
+        VEL_LIMIT     = 1.2
+        START_POINT   = [0, 0, HOVER_HEIGHT] 
         
         # 定义飞行轨迹
         Trajectory = tools.Trajectory_Class('position_records.csv')
         TARGET_POINTS = Trajectory.return_gate_points_list()
-        planner = MotionPlanner3D(Gate_points = TARGET_POINTS, 
+        planner = MotionPlanner3D(Gate_points = TARGET_POINTS,
+                                  start_point = START_POINT, 
                                   time_gain   = TIME_GAIN, 
                                   speed_limit = VEL_LIMIT)
         
@@ -159,13 +160,21 @@ if __name__ == '__main__':
                 index += 1
 
             try:
-                cf.commander.send_full_state_setpoint(
-                    POS_COMMAND[index],
-                    VEL_COMMAND[index],
-                    [0,0,0],
-                    [0,0,0,1],
-                    0, 0, 0
+                
+                cf.commander.send_position_setpoint(
+                    POS_COMMAND[index][0],
+                    POS_COMMAND[index][1],
+                    POS_COMMAND[index][2],
+                    0
                 )
+
+                # cf.commander.send_full_state_setpoint(
+                #     POS_COMMAND[index],
+                #     VEL_COMMAND[index],
+                #     [0,0,0],
+                #     [0,0,0,1],
+                #     0, 0, 0
+                # )
 
                 record_position(le, flight_log) #00FF00 记录飞行数据
             except IndexError:

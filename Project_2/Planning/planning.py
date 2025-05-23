@@ -6,15 +6,17 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 class MotionPlanner3D():
     
     #Question: SIMON PID, what is vel_max set for PID? Check should be same here
-    def __init__(self, Gate_points, time_gain = 1.5, speed_limit = 1.4, DEBUG = 0):
-
+    def __init__(self, Gate_points, 
+                 start_point = [0,0,0.3], 
+                 time_gain = 1.5, 
+                 speed_limit = 1.4, 
+                 DEBUG = 0):
         
         self.DEBUG = DEBUG
         self.Gate_points = Gate_points
         self.speed_limit = speed_limit
 
         #FF0000 起点
-        start_point = [0,0,0.3] # 30cm 起飞高度
         self.start_point = start_point
 
         # 构建两圈 way_points
@@ -184,138 +186,6 @@ class MotionPlanner3D():
 
         return poly_coeffs
 
-    # def poly_setpoint_extraction(self, poly_coeffs, obs, path_waypoints):
-
-    #     # DO NOT MODIFY --------------------------------------------------------------------------------------- ##
-
-    #     # Uses the class features: self.disc_steps, self.times, self.poly_coeffs, self.vel_lim, self.acc_lim
-    #     x_vals, y_vals, z_vals       = np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1))
-    #     v_x_vals, v_y_vals, v_z_vals = np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1))
-    #     a_x_vals, a_y_vals, a_z_vals = np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1))
-
-    #     # Define the time reference in self.disc_steps number of segements
-    #     time_setpoints = np.linspace(self.times[0], self.times[-1], self.disc_steps*len(self.times))  # Fine time intervals
-
-    #     # Extract the x,y and z direction polynomial coefficient vectors
-    #     coeff_x = poly_coeffs[:,0]
-    #     coeff_y = poly_coeffs[:,1]
-    #     coeff_z = poly_coeffs[:,2]
-
-    #     for i,t in enumerate(time_setpoints):
-    #         seg_idx = min(max(np.searchsorted(self.times, t)-1,0), len(coeff_x) - 1)
-    #         # Determine the x,y and z position reference points at every refernce time
-    #         x_vals[i,:]   = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[0],coeff_x[seg_idx*6:(seg_idx+1)*6])
-    #         y_vals[i,:]   = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[0],coeff_y[seg_idx*6:(seg_idx+1)*6])
-    #         z_vals[i,:]   = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[0],coeff_z[seg_idx*6:(seg_idx+1)*6])
-    #         # Determine the x,y and z velocities at every reference time
-    #         v_x_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[1],coeff_x[seg_idx*6:(seg_idx+1)*6])
-    #         v_y_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[1],coeff_y[seg_idx*6:(seg_idx+1)*6])
-    #         v_z_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[1],coeff_z[seg_idx*6:(seg_idx+1)*6])
-    #         # Determine the x,y and z accelerations at every reference time
-    #         a_x_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[2],coeff_x[seg_idx*6:(seg_idx+1)*6])
-    #         a_y_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[2],coeff_y[seg_idx*6:(seg_idx+1)*6])
-    #         a_z_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[2],coeff_z[seg_idx*6:(seg_idx+1)*6])
-
-    #     #0000FF 计算 YAW 轴
-    #     yaw_vals = np.zeros((self.disc_steps*len(self.times),1))             #0000FF 
-    #     yaw_vals = np.arctan2(v_y_vals, v_x_vals)  # (N×1) 矩阵
-    #     yaw_vals = np.rad2deg(yaw_vals)  # 转换为角度
-
-    #     trajectory_setpoints  = np.hstack((x_vals, y_vals, z_vals, yaw_vals)) #0000FF
-    #     trajectory_velocities = np.hstack((v_x_vals, v_y_vals, v_z_vals))     #0000FF
-
-            
-    #     # Find the maximum absolute velocity during the segment
-    #     vel_max  = np.max(np.sqrt(v_x_vals**2 + v_y_vals**2 + v_z_vals**2))
-    #     vel_mean = np.mean(np.sqrt(v_x_vals**2 + v_y_vals**2 + v_z_vals**2))
-    #     acc_max  = np.max(np.sqrt(a_x_vals**2 + a_y_vals**2 + a_z_vals**2))
-    #     acc_mean = np.mean(np.sqrt(a_x_vals**2 + a_y_vals**2 + a_z_vals**2))
-        
-    #     # Check that it is less than an upper limit velocity v_lim
-    #     assert vel_max <= self.vel_lim, "The drone velocity exceeds the limit velocity : " + str(vel_max) + " m/s"
-    #     assert acc_max <= self.acc_lim, "The drone acceleration exceeds the limit acceleration : " + str(acc_max) + " m/s²"
-
-    #     self.result_traj_vel_max = vel_max
-    #     self.result_traj_acc_max = acc_max
-
-    #     # ---------------------------------------------------------------------------------------------------- ##
-
-    #     return trajectory_setpoints, trajectory_velocities, time_setpoints
-    
-
-
-    # def poly_setpoint_extraction(self, poly_coeffs, obs, path_waypoints):
-    #     # ——— unchanged setup ———
-    #     # Extract polynomial coefficient vectors
-    #     coeff_x = poly_coeffs[:,0]
-    #     coeff_y = poly_coeffs[:,1]
-    #     coeff_z = poly_coeffs[:,2]
-
-    #     # Desired time increment per sample (original uniform)
-    #     dt = (self.times[-1] - self.times[0]) / (self.disc_steps * len(self.times) - 1)
-    #     # Maximum spatial step per sample to respect vel_lim
-    #     ds_max = self.vel_lim * dt
-
-    #     # Helper to compute position & yaw at arbitrary t
-    #     def sample_at(t):
-    #         # find segment index
-    #         seg_idx = min(max(np.searchsorted(self.times, t) - 1, 0), len(coeff_x)//6 - 1)
-    #         tau = t - self.times[seg_idx]
-    #         A = self.compute_poly_matrix(tau)
-    #         cx = coeff_x[seg_idx*6:(seg_idx+1)*6]
-    #         cy = coeff_y[seg_idx*6:(seg_idx+1)*6]
-    #         cz = coeff_z[seg_idx*6:(seg_idx+1)*6]
-    #         # position
-    #         px = A[0].dot(cx)
-    #         py = A[0].dot(cy)
-    #         pz = A[0].dot(cz)
-    #         # velocity (for yaw)
-    #         vx = A[1].dot(cx)
-    #         vy = A[1].dot(cy)
-    #         yaw = np.rad2deg(np.arctan2(vy, vx))
-    #         return np.array([px, py, pz]), yaw
-
-    #     # start sampling
-    #     t_curr = self.times[0]
-    #     pos_prev, yaw_prev = sample_at(t_curr)
-    #     trajectory = [[*pos_prev, yaw_prev]]
-    #     time_pts   = [t_curr]
-
-    #     # step until the end
-    #     while t_curr < self.times[-1] - 1e-6:
-    #         t_next = min(t_curr + dt, self.times[-1])
-    #         pos_next, yaw_next = sample_at(t_next)
-    #         dist = np.linalg.norm(pos_next - pos_prev)
-
-    #         if dist <= ds_max:
-    #             # can step full dt
-    #             t_sample, pos_sample, yaw_sample = t_next, pos_next, yaw_next
-    #         else:
-    #             # need to interpolate back so dist == ds_max
-    #             alpha = ds_max / dist
-    #             t_sample = t_curr + (t_next - t_curr) * alpha
-    #             pos_sample, yaw_sample = sample_at(t_sample)
-
-    #         # record and advance
-    #         trajectory.append([*pos_sample, yaw_sample])
-    #         time_pts.append(t_sample)
-    #         t_curr, pos_prev = t_sample, pos_sample
-
-    #     trajectory_setpoints = np.array(trajectory)
-    #     time_setpoints       = np.array(time_pts)
-
-    #     # ——— then your existing velocity/acc checks & storage ———
-    #     # … (copy rest of original code here) …
-
-
-    #     # 重新生成时间采样点
-    #     length = len(time_setpoints)
-    #     for i in range(length):
-    #         time_setpoints[i] = i*self.delta_t
-
-    #     return trajectory_setpoints, time_setpoints
-
-
 
     def poly_setpoint_extraction(self, poly_coeffs, obs, path_waypoints):
         # ——— unchanged setup ———
@@ -389,7 +259,34 @@ class MotionPlanner3D():
 
         return trajectory_setpoints, trajectory_velocities, time_setpoints
 
+    # 计算曲率半径
+    def compute_curvature_radius(self):
+        """
+        计算每个 trajectory_setpoints 的曲率半径（倒数曲率），返回 shape=(N,) 的数组。
+        """
+        if self.trajectory_setpoints is None:
+            raise ValueError("trajectory_setpoints is None, 请先规划轨迹。")
+        if self.trajectory_velocities is None:
+            raise ValueError("trajectory_velocities is None, 请先规划轨迹。")
 
+        # 取轨迹点
+        xyz = self.trajectory_setpoints[:, :3]
+        N = len(xyz)
+
+        # 计算一阶导数（速度）和二阶导数（加速度）
+        v = np.gradient(xyz, axis=0) / self.delta_t
+        a = np.gradient(v, axis=0) / self.delta_t
+
+        # 曲率公式：kappa = |v × a| / |v|^3
+        cross = np.cross(v, a)
+        v_norm = np.linalg.norm(v, axis=1)
+        cross_norm = np.linalg.norm(cross, axis=1)
+        # 避免除零
+        with np.errstate(divide='ignore', invalid='ignore'):
+            curvature = np.where(v_norm > 1e-6, cross_norm / (v_norm**3), 0.0)
+            curvature_radius = np.where(curvature > 1e-6, 1.0 / curvature, np.inf)
+
+        return curvature_radius
 
 
 
@@ -428,45 +325,6 @@ class MotionPlanner3D():
         self.init_params(self.waypoints)
         self.run_planner(None, self.waypoints)
 
-    # def resample_and_replan(self, distance=1.0):
-    #     """
-    #     根据当前 trajectory_setpoints 采样等间距 waypoints，保留原始 waypoints，并保证采样点间距均匀。
-    #     """
-    #     if self.trajectory_setpoints is None:
-    #         raise ValueError("trajectory_setpoints is None, 请先运行一次规划。")
-        
-    #     traj = self.trajectory_setpoints
-    #     xyz = traj[:, :3]
-    #     dists = np.linalg.norm(np.diff(xyz, axis=0), axis=1)
-    #     cum_dist = np.insert(np.cumsum(dists), 0, 0)
-    #     total_dist = cum_dist[-1]
-    #     num_points = int(np.floor(total_dist / distance)) + 1
-    #     sample_dists = np.linspace(0, total_dist, num_points)
-    #     sampled_xyz = np.zeros((num_points, 3))
-    #     for i in range(3):
-    #         sampled_xyz[:, i] = np.interp(sample_dists, cum_dist, xyz[:, i])
-
-    #     # 保留原始 waypoints，合并后去重并排序
-    #     orig_xyz = np.array(self.original_waypoints)
-    #     # 计算原始点在轨迹上的最近距离
-    #     orig_dists = []
-    #     for pt in orig_xyz:
-    #         dist_along = np.argmin(np.linalg.norm(xyz - pt, axis=1))
-    #         orig_dists.append(cum_dist[dist_along])
-    #     # 合并采样点和原始点
-    #     all_points = np.vstack((sampled_xyz, orig_xyz))
-    #     all_dists = np.hstack((sample_dists, orig_dists))
-    #     # 按距离排序，去重
-    #     sort_idx = np.argsort(all_dists)
-    #     sorted_points = all_points[sort_idx]
-    #     # 去重（保留顺序）
-    #     unique_points = []
-    #     for pt in sorted_points:
-    #         if len(unique_points) == 0 or not np.allclose(pt, unique_points[-1]):
-    #             unique_points.append(pt)
-    #     self.waypoints = [p.tolist() for p in unique_points]
-    #     self.init_params(self.waypoints)
-    #     self.run_planner(None, self.waypoints)
 
     def plot_continuous(self, 
              obs,                  # 障碍物
@@ -549,12 +407,12 @@ class MotionPlanner3D():
 
 
     def plot_discrete(self, 
-                obs,                  # 障碍物
-                path_waypoints,       # 路径点 - 离散
-                trajectory_setpoints  # 轨迹点 - 采样点
-                ):
+            obs,                  # 障碍物
+            path_waypoints,       # 路径点 - 离散
+            trajectory_setpoints  # 轨迹点 - 采样点
+            ):
         """
-        只画轨迹点（不画连续轨迹线），并可选画箭头表示朝向。
+        画轨迹点，使用颜色渐变表示速度快慢（蓝色为慢，红色为快）。
         """
         fig = plt.figure(figsize=(8, 6))
         ax = fig.add_subplot(111, projection='3d')
@@ -564,56 +422,90 @@ class MotionPlanner3D():
             for ob in obs:
                 self.plot_obstacle(ax, ob[0], ob[1], ob[2], ob[3], ob[4], ob[5])
 
-        # 画轨迹点
-        ax.scatter(
-            trajectory_setpoints[:,0],
-            trajectory_setpoints[:,1],
-            trajectory_setpoints[:,2],
-            color='blue', marker='.', label="Trajectory Points"
+        # 计算速度（基于相邻点的位置差和时间间隔）
+        xs = trajectory_setpoints[:,0]
+        ys = trajectory_setpoints[:,1]
+        zs = trajectory_setpoints[:,2]
+        
+        # 计算速度 (如果数据点足够)
+        if len(trajectory_setpoints) > 1:
+            # 计算位置差
+            diffs = np.diff(trajectory_setpoints[:, :3], axis=0)
+            # 计算欧几里得距离
+            distances = np.sqrt(np.sum(diffs**2, axis=1))
+            # 假设时间步长固定 (self.delta_t)
+            velocities = distances / self.delta_t
+            # 对第一个点重复一次速度值，使长度匹配
+            velocities = np.append(velocities[0], velocities)
+        else:
+            velocities = np.array([0])  # 如果只有一个点
+        
+        # 归一化速度用于着色 (0 到 1 之间)
+        norm_velocities = None
+        if np.max(velocities) > np.min(velocities):
+            norm_velocities = (velocities - np.min(velocities)) / (np.max(velocities) - np.min(velocities))
+        else:
+            norm_velocities = np.zeros_like(velocities)
+        
+        # 创建颜色映射，从蓝色（慢）到红色（快）
+        cmap = plt.cm.coolwarm
+        colors = cmap(norm_velocities)
+        
+        # 画轨迹点，颜色代表速度
+        scatter = ax.scatter(
+            xs, ys, zs,
+            c=velocities, 
+            cmap='coolwarm', 
+            marker='.', 
+            label="Trajectory Points",
+            s=30, # 点大小
+            alpha=0.8 # 透明度
         )
-
+        
+        # 添加颜色条，显示速度值
+        cbar = plt.colorbar(scatter, ax=ax, pad=0.1)
+        cbar.set_label('Velocity (m/s)')
+        
         # 画路径点
         waypoints_x = [p[0] for p in path_waypoints]
         waypoints_y = [p[1] for p in path_waypoints]
         waypoints_z = [p[2] for p in path_waypoints]
         ax.scatter(
             waypoints_x, waypoints_y, waypoints_z,
-            color='red', marker='o', label="Waypoints"
+            color='black', marker='o', label="Waypoints", s=80
         )
 
-        # 可选：画箭头表示朝向
-        skip = 10        # 每隔多少个点画一个箭头
+        # 画箭头表示朝向
+        skip = min(10, max(1, len(xs) // 20))  # 动态调整箭头数量
         arrow_len = 0.2  # 箭头长度
-        xs = trajectory_setpoints[:,0]
-        ys = trajectory_setpoints[:,1]
-        zs = trajectory_setpoints[:,2]
-        yaws = np.deg2rad(trajectory_setpoints[:,3])
-
-        for i in range(0, len(xs), skip):
-            x, y, z, yaw = xs[i], ys[i], zs[i], yaws[i]
-            dx = np.cos(yaw)
-            dy = np.sin(yaw)
-            dz = 0
-            ax.quiver(
-                x, y, z,
-                dx, dy, dz,
-                length=arrow_len,
-                arrow_length_ratio=0.4,
-                pivot='tail',
-                linewidth=1,
-                color='black'
-            )
+        
+        if len(trajectory_setpoints[0]) > 3:  # 确保有yaw数据
+            yaws = np.deg2rad(trajectory_setpoints[:,3])
+            for i in range(0, len(xs), skip):
+                x, y, z, yaw = xs[i], ys[i], zs[i], yaws[i]
+                dx = np.cos(yaw)
+                dy = np.sin(yaw)
+                dz = 0
+                ax.quiver(
+                    x, y, z,
+                    dx, dy, dz,
+                    length=arrow_len,
+                    arrow_length_ratio=0.4,
+                    pivot='tail',
+                    linewidth=1,
+                    color='green'  # 使用绿色区分箭头
+                )
 
         # 设置坐标轴范围、标签、图例
-        ax.set_xlim(-2.0, +3.0)
-        ax.set_ylim(-1.5, +2.0)
-        ax.set_zlim(0, 4)
+        # ax.set_xlim(-2.0, +3.0)
+        # ax.set_ylim(-1.5, +2.0)
+        # ax.set_zlim(0, 4)
         ax.set_xlabel("X Position")
         ax.set_ylabel("Y Position")
         ax.set_zlabel("Z Position")
-        ax.set_title("3D Motion planning trajectories")
+        ax.set_title("3D Trajectory with Velocity Gradient")
         ax.legend()
-    
+
         # 手动设置坐标轴范围相等
         xyz_limits = np.array([ax.get_xlim3d(), ax.get_ylim3d(), ax.get_zlim3d()])
         xyz_center = np.mean(xyz_limits, axis=1)
@@ -624,5 +516,21 @@ class MotionPlanner3D():
 
         # 俯视视角
         ax.view_init(elev=90, azim=90)
+        
+        # 添加速度统计信息
+        if len(velocities) > 0:
+            plt.figtext(0.02, 0.02, f"Min Speed: {np.min(velocities):.2f} m/s\n"
+                                f"Max Speed: {np.max(velocities):.2f} m/s\n"
+                                f"Avg Speed: {np.mean(velocities):.2f} m/s", 
+                    bbox=dict(facecolor='white', alpha=0.5))
+            
+
+        # 在 plot_discrete 函数中添加这些调试语句
+        print(f"Delta_t: {self.delta_t}")
+        # print(f"Velocity statistics:")
+        # print(f"  Min velocity: {np.min(velocities):.4f} m/s")
+        # print(f"  Max velocity: {np.max(velocities):.4f} m/s")
+        # print(f"  Mean velocity: {np.mean(velocities):.4f} m/s")
+        # print(f"  Velocity range: {np.max(velocities) - np.min(velocities):.4f} m/s")
 
         plt.show()
