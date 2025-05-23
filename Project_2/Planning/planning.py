@@ -479,13 +479,94 @@ class MotionPlanner3D():
         plt.show()
 
 
+    # def plot_discrete(self, 
+    #             obs,                  # 障碍物
+    #             path_waypoints,       # 路径点 - 离散
+    #             trajectory_setpoints  # 轨迹点 - 采样点
+    #             ):
+    #     """
+    #     只画轨迹点（不画连续轨迹线），并可选画箭头表示朝向。
+    #     """
+    #     fig = plt.figure(figsize=(8, 6))
+    #     ax = fig.add_subplot(111, projection='3d')
+
+    #     # 画障碍物
+    #     if obs is not None:
+    #         for ob in obs:
+    #             self.plot_obstacle(ax, ob[0], ob[1], ob[2], ob[3], ob[4], ob[5])
+
+    #     # 画轨迹点
+    #     ax.scatter(
+    #         trajectory_setpoints[:,0],
+    #         trajectory_setpoints[:,1],
+    #         trajectory_setpoints[:,2],
+    #         color='blue', marker='.', label="Trajectory Points"
+    #     )
+
+    #     # 画路径点
+    #     waypoints_x = [p[0] for p in path_waypoints]
+    #     waypoints_y = [p[1] for p in path_waypoints]
+    #     waypoints_z = [p[2] for p in path_waypoints]
+    #     ax.scatter(
+    #         waypoints_x, waypoints_y, waypoints_z,
+    #         color='red', marker='o', label="Waypoints"
+    #     )
+
+    #     # 可选：画箭头表示朝向
+    #     skip = 10        # 每隔多少个点画一个箭头
+    #     arrow_len = 0.2  # 箭头长度
+    #     xs = trajectory_setpoints[:,0]
+    #     ys = trajectory_setpoints[:,1]
+    #     zs = trajectory_setpoints[:,2]
+    #     yaws = np.deg2rad(trajectory_setpoints[:,3])
+
+    #     for i in range(0, len(xs), skip):
+    #         x, y, z, yaw = xs[i], ys[i], zs[i], yaws[i]
+    #         dx = np.cos(yaw)
+    #         dy = np.sin(yaw)
+    #         dz = 0
+    #         ax.quiver(
+    #             x, y, z,
+    #             dx, dy, dz,
+    #             length=arrow_len,
+    #             arrow_length_ratio=0.4,
+    #             pivot='tail',
+    #             linewidth=1,
+    #             color='black'
+    #         )
+
+    #     # 设置坐标轴范围、标签、图例
+    #     ax.set_xlim(-2.0, +3.0)
+    #     ax.set_ylim(-1.5, +2.0)
+    #     ax.set_zlim(0, 4)
+    #     ax.set_xlabel("X Position")
+    #     ax.set_ylabel("Y Position")
+    #     ax.set_zlabel("Z Position")
+    #     ax.set_title("3D Motion planning trajectories")
+    #     ax.legend()
+    
+    #     # 手动设置坐标轴范围相等
+    #     xyz_limits = np.array([ax.get_xlim3d(), ax.get_ylim3d(), ax.get_zlim3d()])
+    #     xyz_center = np.mean(xyz_limits, axis=1)
+    #     xyz_radius = (xyz_limits[:,1] - xyz_limits[:,0]).max() / 2
+    #     ax.set_xlim3d([xyz_center[0] - xyz_radius, xyz_center[0] + xyz_radius])
+    #     ax.set_ylim3d([xyz_center[1] - xyz_radius, xyz_center[1] + xyz_radius])
+    #     ax.set_zlim3d([xyz_center[2] - xyz_radius, xyz_center[2] + xyz_radius])
+
+    #     # 俯视视角
+    #     ax.view_init(elev=90, azim=90)
+
+    #     plt.show()
+
+
+
     def plot_discrete(self, 
-                obs,                  # 障碍物
-                path_waypoints,       # 路径点 - 离散
-                trajectory_setpoints  # 轨迹点 - 采样点
-                ):
+            obs,                  # 障碍物
+            path_waypoints,       # 路径点 - 离散
+            trajectory_setpoints  # 轨迹点 - 采样点
+            ):
         """
-        只画轨迹点（不画连续轨迹线），并可选画箭头表示朝向。
+        画轨迹点，使用颜色渐变表示速度快慢（蓝色为慢，红色为快）。
         """
         fig = plt.figure(figsize=(8, 6))
         ax = fig.add_subplot(111, projection='3d')
@@ -495,45 +576,79 @@ class MotionPlanner3D():
             for ob in obs:
                 self.plot_obstacle(ax, ob[0], ob[1], ob[2], ob[3], ob[4], ob[5])
 
-        # 画轨迹点
-        ax.scatter(
-            trajectory_setpoints[:,0],
-            trajectory_setpoints[:,1],
-            trajectory_setpoints[:,2],
-            color='blue', marker='.', label="Trajectory Points"
+        # 计算速度（基于相邻点的位置差和时间间隔）
+        xs = trajectory_setpoints[:,0]
+        ys = trajectory_setpoints[:,1]
+        zs = trajectory_setpoints[:,2]
+        
+        # 计算速度 (如果数据点足够)
+        if len(trajectory_setpoints) > 1:
+            # 计算位置差
+            diffs = np.diff(trajectory_setpoints[:, :3], axis=0)
+            # 计算欧几里得距离
+            distances = np.sqrt(np.sum(diffs**2, axis=1))
+            # 假设时间步长固定 (self.delta_t)
+            velocities = distances / self.delta_t
+            # 对第一个点重复一次速度值，使长度匹配
+            velocities = np.append(velocities[0], velocities)
+        else:
+            velocities = np.array([0])  # 如果只有一个点
+        
+        # 归一化速度用于着色 (0 到 1 之间)
+        norm_velocities = None
+        if np.max(velocities) > np.min(velocities):
+            norm_velocities = (velocities - np.min(velocities)) / (np.max(velocities) - np.min(velocities))
+        else:
+            norm_velocities = np.zeros_like(velocities)
+        
+        # 创建颜色映射，从蓝色（慢）到红色（快）
+        cmap = plt.cm.coolwarm
+        colors = cmap(norm_velocities)
+        
+        # 画轨迹点，颜色代表速度
+        scatter = ax.scatter(
+            xs, ys, zs,
+            c=velocities, 
+            cmap='coolwarm', 
+            marker='.', 
+            label="Trajectory Points",
+            s=30, # 点大小
+            alpha=0.8 # 透明度
         )
-
+        
+        # 添加颜色条，显示速度值
+        cbar = plt.colorbar(scatter, ax=ax, pad=0.1)
+        cbar.set_label('Velocity (m/s)')
+        
         # 画路径点
         waypoints_x = [p[0] for p in path_waypoints]
         waypoints_y = [p[1] for p in path_waypoints]
         waypoints_z = [p[2] for p in path_waypoints]
         ax.scatter(
             waypoints_x, waypoints_y, waypoints_z,
-            color='red', marker='o', label="Waypoints"
+            color='black', marker='o', label="Waypoints", s=80
         )
 
-        # 可选：画箭头表示朝向
-        skip = 10        # 每隔多少个点画一个箭头
+        # 画箭头表示朝向
+        skip = min(10, max(1, len(xs) // 20))  # 动态调整箭头数量
         arrow_len = 0.2  # 箭头长度
-        xs = trajectory_setpoints[:,0]
-        ys = trajectory_setpoints[:,1]
-        zs = trajectory_setpoints[:,2]
-        yaws = np.deg2rad(trajectory_setpoints[:,3])
-
-        for i in range(0, len(xs), skip):
-            x, y, z, yaw = xs[i], ys[i], zs[i], yaws[i]
-            dx = np.cos(yaw)
-            dy = np.sin(yaw)
-            dz = 0
-            ax.quiver(
-                x, y, z,
-                dx, dy, dz,
-                length=arrow_len,
-                arrow_length_ratio=0.4,
-                pivot='tail',
-                linewidth=1,
-                color='black'
-            )
+        
+        if len(trajectory_setpoints[0]) > 3:  # 确保有yaw数据
+            yaws = np.deg2rad(trajectory_setpoints[:,3])
+            for i in range(0, len(xs), skip):
+                x, y, z, yaw = xs[i], ys[i], zs[i], yaws[i]
+                dx = np.cos(yaw)
+                dy = np.sin(yaw)
+                dz = 0
+                ax.quiver(
+                    x, y, z,
+                    dx, dy, dz,
+                    length=arrow_len,
+                    arrow_length_ratio=0.4,
+                    pivot='tail',
+                    linewidth=1,
+                    color='green'  # 使用绿色区分箭头
+                )
 
         # 设置坐标轴范围、标签、图例
         ax.set_xlim(-2.0, +3.0)
@@ -542,9 +657,9 @@ class MotionPlanner3D():
         ax.set_xlabel("X Position")
         ax.set_ylabel("Y Position")
         ax.set_zlabel("Z Position")
-        ax.set_title("3D Motion planning trajectories")
+        ax.set_title("3D Trajectory with Velocity Gradient")
         ax.legend()
-    
+
         # 手动设置坐标轴范围相等
         xyz_limits = np.array([ax.get_xlim3d(), ax.get_ylim3d(), ax.get_zlim3d()])
         xyz_center = np.mean(xyz_limits, axis=1)
@@ -555,5 +670,25 @@ class MotionPlanner3D():
 
         # 俯视视角
         ax.view_init(elev=90, azim=90)
+        
+        # 添加速度统计信息
+        if len(velocities) > 0:
+            plt.figtext(0.02, 0.02, f"Min Speed: {np.min(velocities):.2f} m/s\n"
+                                f"Max Speed: {np.max(velocities):.2f} m/s\n"
+                                f"Avg Speed: {np.mean(velocities):.2f} m/s", 
+                    bbox=dict(facecolor='white', alpha=0.5))
+            
+
+        # 在 plot_discrete 函数中添加这些调试语句
+        print(f"Delta_t: {self.delta_t}")
+        print(f"Velocity statistics:")
+        print(f"  Min velocity: {np.min(velocities):.4f} m/s")
+        print(f"  Max velocity: {np.max(velocities):.4f} m/s")
+        print(f"  Mean velocity: {np.mean(velocities):.4f} m/s")
+        print(f"  Velocity range: {np.max(velocities) - np.min(velocities):.4f} m/s")
 
         plt.show()
+
+
+        
+        
