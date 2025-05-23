@@ -160,7 +160,7 @@ def FLY_or_LAND(cf: Crazyflie,
                 TIME_):
     
     # 单位变化
-    TIME = 10*TIME_
+    TIME = int(10*TIME_)
 
     if type == 'takeoff':
         for y in range(TIME):
