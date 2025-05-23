@@ -123,10 +123,10 @@ if __name__ == '__main__':
         ##################################################### 飞行数据 #####################################################
 
         # 定义飞行参数
-        TIME_TAKE_OFF = 1.0*second
+        TIME_TAKE_OFF = 0.5*second
         TIME_LAND     = 0.5*second
         HOVER_HEIGHT  = 30*cm  
-        TIME_GAIN     = 1.8
+        TIME_GAIN     = 1.4
         SPEED_GAIN    = 0.4
         VEL_LIMIT     = 4 # 1.4
         
@@ -159,10 +159,14 @@ if __name__ == '__main__':
                 index += 1
 
             try:
-                cf.commander.send_position_setpoint(POS_COMMAND[index][0] + SPEED_GAIN * VEL_COMMAND[index][0],
-                                                    POS_COMMAND[index][1] + SPEED_GAIN * VEL_COMMAND[index][1],
-                                                    POS_COMMAND[index][2] + 0.1 * VEL_COMMAND[index][2],
-                                                    0)
+                cf.commander.send_full_state_setpoint(
+                    POS_COMMAND[index],
+                    VEL_COMMAND[index],
+                    [0,0,0],
+                    [0,0,0,1],
+                    0, 0, 0
+                )
+
                 record_position(le, flight_log) #00FF00 记录飞行数据
             except IndexError:
                 pass

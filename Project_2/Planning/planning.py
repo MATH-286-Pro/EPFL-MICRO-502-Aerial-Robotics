@@ -184,63 +184,63 @@ class MotionPlanner3D():
 
         return poly_coeffs
 
-    def poly_setpoint_extraction(self, poly_coeffs, obs, path_waypoints):
+    # def poly_setpoint_extraction(self, poly_coeffs, obs, path_waypoints):
 
-        # DO NOT MODIFY --------------------------------------------------------------------------------------- ##
+    #     # DO NOT MODIFY --------------------------------------------------------------------------------------- ##
 
-        # Uses the class features: self.disc_steps, self.times, self.poly_coeffs, self.vel_lim, self.acc_lim
-        x_vals, y_vals, z_vals       = np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1))
-        v_x_vals, v_y_vals, v_z_vals = np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1))
-        a_x_vals, a_y_vals, a_z_vals = np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1))
+    #     # Uses the class features: self.disc_steps, self.times, self.poly_coeffs, self.vel_lim, self.acc_lim
+    #     x_vals, y_vals, z_vals       = np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1))
+    #     v_x_vals, v_y_vals, v_z_vals = np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1))
+    #     a_x_vals, a_y_vals, a_z_vals = np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1)), np.zeros((self.disc_steps*len(self.times),1))
 
-        # Define the time reference in self.disc_steps number of segements
-        time_setpoints = np.linspace(self.times[0], self.times[-1], self.disc_steps*len(self.times))  # Fine time intervals
+    #     # Define the time reference in self.disc_steps number of segements
+    #     time_setpoints = np.linspace(self.times[0], self.times[-1], self.disc_steps*len(self.times))  # Fine time intervals
 
-        # Extract the x,y and z direction polynomial coefficient vectors
-        coeff_x = poly_coeffs[:,0]
-        coeff_y = poly_coeffs[:,1]
-        coeff_z = poly_coeffs[:,2]
+    #     # Extract the x,y and z direction polynomial coefficient vectors
+    #     coeff_x = poly_coeffs[:,0]
+    #     coeff_y = poly_coeffs[:,1]
+    #     coeff_z = poly_coeffs[:,2]
 
-        for i,t in enumerate(time_setpoints):
-            seg_idx = min(max(np.searchsorted(self.times, t)-1,0), len(coeff_x) - 1)
-            # Determine the x,y and z position reference points at every refernce time
-            x_vals[i,:]   = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[0],coeff_x[seg_idx*6:(seg_idx+1)*6])
-            y_vals[i,:]   = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[0],coeff_y[seg_idx*6:(seg_idx+1)*6])
-            z_vals[i,:]   = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[0],coeff_z[seg_idx*6:(seg_idx+1)*6])
-            # Determine the x,y and z velocities at every reference time
-            v_x_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[1],coeff_x[seg_idx*6:(seg_idx+1)*6])
-            v_y_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[1],coeff_y[seg_idx*6:(seg_idx+1)*6])
-            v_z_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[1],coeff_z[seg_idx*6:(seg_idx+1)*6])
-            # Determine the x,y and z accelerations at every reference time
-            a_x_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[2],coeff_x[seg_idx*6:(seg_idx+1)*6])
-            a_y_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[2],coeff_y[seg_idx*6:(seg_idx+1)*6])
-            a_z_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[2],coeff_z[seg_idx*6:(seg_idx+1)*6])
+    #     for i,t in enumerate(time_setpoints):
+    #         seg_idx = min(max(np.searchsorted(self.times, t)-1,0), len(coeff_x) - 1)
+    #         # Determine the x,y and z position reference points at every refernce time
+    #         x_vals[i,:]   = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[0],coeff_x[seg_idx*6:(seg_idx+1)*6])
+    #         y_vals[i,:]   = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[0],coeff_y[seg_idx*6:(seg_idx+1)*6])
+    #         z_vals[i,:]   = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[0],coeff_z[seg_idx*6:(seg_idx+1)*6])
+    #         # Determine the x,y and z velocities at every reference time
+    #         v_x_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[1],coeff_x[seg_idx*6:(seg_idx+1)*6])
+    #         v_y_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[1],coeff_y[seg_idx*6:(seg_idx+1)*6])
+    #         v_z_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[1],coeff_z[seg_idx*6:(seg_idx+1)*6])
+    #         # Determine the x,y and z accelerations at every reference time
+    #         a_x_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[2],coeff_x[seg_idx*6:(seg_idx+1)*6])
+    #         a_y_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[2],coeff_y[seg_idx*6:(seg_idx+1)*6])
+    #         a_z_vals[i,:] = np.dot(self.compute_poly_matrix(t-self.times[seg_idx])[2],coeff_z[seg_idx*6:(seg_idx+1)*6])
 
-        #0000FF 计算 YAW 轴
-        yaw_vals = np.zeros((self.disc_steps*len(self.times),1))             #0000FF 
-        yaw_vals = np.arctan2(v_y_vals, v_x_vals)  # (N×1) 矩阵
-        yaw_vals = np.rad2deg(yaw_vals)  # 转换为角度
+    #     #0000FF 计算 YAW 轴
+    #     yaw_vals = np.zeros((self.disc_steps*len(self.times),1))             #0000FF 
+    #     yaw_vals = np.arctan2(v_y_vals, v_x_vals)  # (N×1) 矩阵
+    #     yaw_vals = np.rad2deg(yaw_vals)  # 转换为角度
 
-        trajectory_setpoints  = np.hstack((x_vals, y_vals, z_vals, yaw_vals)) #0000FF
-        trajectory_velocities = np.hstack((v_x_vals, v_y_vals, v_z_vals))     #0000FF
+    #     trajectory_setpoints  = np.hstack((x_vals, y_vals, z_vals, yaw_vals)) #0000FF
+    #     trajectory_velocities = np.hstack((v_x_vals, v_y_vals, v_z_vals))     #0000FF
 
             
-        # Find the maximum absolute velocity during the segment
-        vel_max  = np.max(np.sqrt(v_x_vals**2 + v_y_vals**2 + v_z_vals**2))
-        vel_mean = np.mean(np.sqrt(v_x_vals**2 + v_y_vals**2 + v_z_vals**2))
-        acc_max  = np.max(np.sqrt(a_x_vals**2 + a_y_vals**2 + a_z_vals**2))
-        acc_mean = np.mean(np.sqrt(a_x_vals**2 + a_y_vals**2 + a_z_vals**2))
+    #     # Find the maximum absolute velocity during the segment
+    #     vel_max  = np.max(np.sqrt(v_x_vals**2 + v_y_vals**2 + v_z_vals**2))
+    #     vel_mean = np.mean(np.sqrt(v_x_vals**2 + v_y_vals**2 + v_z_vals**2))
+    #     acc_max  = np.max(np.sqrt(a_x_vals**2 + a_y_vals**2 + a_z_vals**2))
+    #     acc_mean = np.mean(np.sqrt(a_x_vals**2 + a_y_vals**2 + a_z_vals**2))
         
-        # Check that it is less than an upper limit velocity v_lim
-        assert vel_max <= self.vel_lim, "The drone velocity exceeds the limit velocity : " + str(vel_max) + " m/s"
-        assert acc_max <= self.acc_lim, "The drone acceleration exceeds the limit acceleration : " + str(acc_max) + " m/s²"
+    #     # Check that it is less than an upper limit velocity v_lim
+    #     assert vel_max <= self.vel_lim, "The drone velocity exceeds the limit velocity : " + str(vel_max) + " m/s"
+    #     assert acc_max <= self.acc_lim, "The drone acceleration exceeds the limit acceleration : " + str(acc_max) + " m/s²"
 
-        self.result_traj_vel_max = vel_max
-        self.result_traj_acc_max = acc_max
+    #     self.result_traj_vel_max = vel_max
+    #     self.result_traj_acc_max = acc_max
 
-        # ---------------------------------------------------------------------------------------------------- ##
+    #     # ---------------------------------------------------------------------------------------------------- ##
 
-        return trajectory_setpoints, trajectory_velocities, time_setpoints
+    #     return trajectory_setpoints, trajectory_velocities, time_setpoints
     
 
 
@@ -316,6 +316,78 @@ class MotionPlanner3D():
     #     return trajectory_setpoints, time_setpoints
 
 
+
+    def poly_setpoint_extraction(self, poly_coeffs, obs, path_waypoints):
+        # ——— unchanged setup ———
+        coeff_x = poly_coeffs[:,0]
+        coeff_y = poly_coeffs[:,1]
+        coeff_z = poly_coeffs[:,2]
+
+        # 原始时间增量
+        dt = self.delta_t
+        ds_max = self.vel_lim * dt
+
+        # Helper: 在任意时刻 t 返回位置、速度、航向
+        def sample_at(t):
+            seg_idx = min(max(np.searchsorted(self.times, t) - 1, 0), len(coeff_x)//6 - 1)
+            tau = t - self.times[seg_idx]
+            A = self.compute_poly_matrix(tau)
+            cx = coeff_x[seg_idx*6:(seg_idx+1)*6]
+            cy = coeff_y[seg_idx*6:(seg_idx+1)*6]
+            cz = coeff_z[seg_idx*6:(seg_idx+1)*6]
+
+            # 位置
+            px = A[0].dot(cx)
+            py = A[0].dot(cy)
+            pz = A[0].dot(cz)
+            # 速度
+            vx = A[1].dot(cx)
+            vy = A[1].dot(cy)
+            vz = A[1].dot(cz)
+            # 航向
+            yaw = np.rad2deg(np.arctan2(vy, vx))
+            return np.array([px, py, pz]), np.array([vx, vy, vz]), yaw
+
+        # 初始化
+        t_curr = self.times[0]
+        pos_prev, vel_prev, yaw_prev = sample_at(t_curr)
+        trajectory        = [[*pos_prev, yaw_prev]]
+        velocities        = [vel_prev]
+        time_pts          = [t_curr]
+
+        # 主循环
+        while t_curr < self.times[-1] - 1e-6:
+            # 先尝试 dt 步进
+            t_next = min(t_curr + dt, self.times[-1])
+            pos_next, vel_next, yaw_next = sample_at(t_next)
+            dist = np.linalg.norm(pos_next - pos_prev)
+
+            if dist <= ds_max:
+                # 全 dt
+                t_sample, pos_sample, vel_sample, yaw_sample = \
+                    t_next, pos_next, vel_next, yaw_next
+            else:
+                # 插值到最大步长
+                alpha = ds_max / dist
+                t_sample = t_curr + (t_next - t_curr) * alpha
+                pos_sample, vel_sample, yaw_sample = sample_at(t_sample)
+
+            trajectory.append([*pos_sample, yaw_sample])
+            velocities.append(vel_sample)
+            time_pts.append(t_sample)
+
+            t_curr, pos_prev = t_sample, pos_sample
+
+        # 转为 numpy
+        trajectory_setpoints = np.array(trajectory)        # shape: (N,4)
+        trajectory_velocities = np.array(velocities)       # shape: (N,3)
+        time_setpoints        = np.array(time_pts)         # 原始不均匀时间
+
+        # 如果需要重新生成均匀时间戳 (可选)
+        N = len(time_pts)
+        time_setpoints = np.arange(N) * dt
+
+        return trajectory_setpoints, trajectory_velocities, time_setpoints
 
 
 
